@@ -6,57 +6,49 @@ This repository serves as a personal organization and development tool used to t
 
 ---
 
-# **Currently Working On**
+# Currently Working On
 
-## **Engineering**
+## Engineering
 
-- [ ] [**Cycling Power Meter Prototype**](engineering/cycling-power-meter)
-      Develop and test a functional cycling power measurement system.  
-  
+- [ ] **[Cycling Power Meter Prototype](engineering/cycling-power-meter)**  
+Develop and test a functional cycling power measurement system.
 
-- [ ] **Engineering Consulting Company**  
-      Build a small engineering consulting practice focused on manufacturing and automation.  
-      → [Open Project](engineering/engineering-consulting)
+- [ ] **[Engineering Consulting Company](engineering/engineering-consulting)**  
+Build a small engineering consulting practice focused on manufacturing and automation.
 
 ---
 
-## **Finance**
+## Finance
 
-- [ ] **Systematic Insider Transaction Signal Strategy**  
-      Research and develop a repeatable investment framework based on insider transaction data.  
-      → [Open Project](finance/insider-transaction-strategy)
+- [ ] **[Systematic Insider Transaction Signal Strategy](finance/insider-transaction-strategy)**  
+Research and develop a repeatable investment framework based on insider transaction data.
 
-- [ ] **Housing Market Analysis**  
-      Study housing market trends and long-term real estate dynamics.  
-      → [Open Project](finance/housing-market-analysis)
+- [ ] **[Housing Market Analysis](finance/housing-market-analysis)**  
+Study housing market trends and long-term real estate dynamics.
 
-- [ ] **Diverse Investment Portfolio**  
-      Continue building and managing a diversified long-term investment portfolio.  
-      → [Open Project](finance/investment-portfolio)
+- [ ] **[Diverse Investment Portfolio](finance/investment-portfolio)**  
+Continue building and managing a diversified long-term investment portfolio.
 
 ---
 
-## **Projects**
+## Projects
 
-- [ ] **Apparel Design Experiments**  
-      Design and test apparel concepts (t-shirts and other ideas).  
-      → [Open Project](projects/apparel-design)
-
----
-
-## **Life**
-
-- [ ] **Ironman Training**  
-      Train and prepare for a full Ironman triathlon.  
-      → [Open Project](life/ironman-training)
-
-- [ ] **Circumnavigation Planning**  
-      Begin long-term research and planning for global sailing circumnavigation.  
-      → [Open Project](life/circumnavigation-planning)
+- [ ] **[Apparel Design Experiments](projects/apparel-design)**  
+Design and test apparel concepts (t-shirts and other ideas).
 
 ---
 
-# **Goals**
+## Life
+
+- [ ] **[Ironman Training](life/ironman-training)**  
+Train and prepare for a full Ironman triathlon.
+
+- [ ] **[Circumnavigation Planning](life/circumnavigation-planning)**  
+Begin long-term research and planning for global sailing circumnavigation.
+
+---
+
+# Goals
 
 - [ ] **Complete a Full Ironman in < 12:30**
 
@@ -65,5 +57,3 @@ This repository serves as a personal organization and development tool used to t
 - [ ] **Build One Functional Hardware Prototype**
 
 - [ ] **Grow Investment Portfolio to $100,000**
-
----
