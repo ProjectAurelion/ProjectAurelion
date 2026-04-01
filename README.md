@@ -10,9 +10,9 @@ This repository serves as a personal organization and development tool used to t
 
 ## **Engineering**
 
-- [ ] **Cycling Power Meter Prototype**  
+- [ ] [**Cycling Power Meter Prototype**](engineering/cycling-power-meter)
       Develop and test a functional cycling power measurement system.  
-      → [Open Project](engineering/cycling-power-meter)
+  
 
 - [ ] **Engineering Consulting Company**  
       Build a small engineering consulting practice focused on manufacturing and automation.  
