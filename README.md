@@ -11,40 +11,48 @@ This repository serves as a personal organization and development tool used to t
 ## **Engineering**
 
 - [ ] **Cycling Power Meter Prototype**  
-      Develop and test a functional cycling power measurement system.
+      Develop and test a functional cycling power measurement system.  
+      → [Open Project](engineering/cycling-power-meter)
 
 - [ ] **Engineering Consulting Company**  
-      Build a small engineering consulting practice focused on manufacturing and automation.
+      Build a small engineering consulting practice focused on manufacturing and automation.  
+      → [Open Project](engineering/engineering-consulting)
 
 ---
 
 ## **Finance**
 
 - [ ] **Systematic Insider Transaction Signal Strategy**  
-      Research and develop a repeatable investment framework based on insider transaction data.
+      Research and develop a repeatable investment framework based on insider transaction data.  
+      → [Open Project](finance/insider-transaction-strategy)
 
 - [ ] **Housing Market Analysis**  
-      Study housing market trends and long-term real estate dynamics.
+      Study housing market trends and long-term real estate dynamics.  
+      → [Open Project](finance/housing-market-analysis)
 
 - [ ] **Diverse Investment Portfolio**  
-      Continue building and managing a diversified long-term investment portfolio.
+      Continue building and managing a diversified long-term investment portfolio.  
+      → [Open Project](finance/investment-portfolio)
 
 ---
 
 ## **Projects**
 
 - [ ] **Apparel Design Experiments**  
-      Design and test apparel concepts (t-shirts and other ideas).
+      Design and test apparel concepts (t-shirts and other ideas).  
+      → [Open Project](projects/apparel-design)
 
 ---
 
 ## **Life**
 
 - [ ] **Ironman Training**  
-      Train and prepare for a full Ironman triathlon.
+      Train and prepare for a full Ironman triathlon.  
+      → [Open Project](life/ironman-training)
 
 - [ ] **Circumnavigation Planning**  
-      Begin long-term research and planning for global sailing circumnavigation.
+      Begin long-term research and planning for global sailing circumnavigation.  
+      → [Open Project](life/circumnavigation-planning)
 
 ---
 
