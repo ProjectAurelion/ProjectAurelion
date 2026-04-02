@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Insider Event Study Dashboard</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: #fffdf9;
+      --ink: #182127;
+      --muted: #5c6770;
+      --accent: #0f766e;
+      --accent-soft: #d8f0ec;
+      --border: #d8d0c4;
+      --danger: #8b1e3f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Iowan Old Style", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, #f9f4ec 0, transparent 30%),
+        linear-gradient(180deg, #efe7da 0%, var(--bg) 40%, #f8f5ef 100%);
+    }
+    .shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    .hero {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+    }
+    .lede {
+      max-width: 800px;
+      font-size: 1.05rem;
+      color: var(--muted);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) 1fr;
+      gap: 20px;
+    }
+    .panel {
+      background: rgba(255, 253, 249, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 24px 60px rgba(64, 52, 39, 0.08);
+      padding: 18px;
+    }
+    h2, h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+    .form-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .row-2 {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+    input, textarea, button {
+      font: inherit;
+    }
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      padding: 10px 12px;
+      color: var(--ink);
+    }
+    textarea {
+      min-height: 88px;
+      resize: vertical;
+    }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+      box-shadow: 0 14px 30px rgba(15, 118, 110, 0.22);
+    }
+    button:hover {
+      transform: translateY(-1px);
+    }
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .status {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--accent-soft);
+      color: var(--ink);
+      min-height: 48px;
+      white-space: pre-wrap;
+    }
+    .status.error {
+      background: #f8dde3;
+      color: var(--danger);
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .card {
+      padding: 14px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+    }
+    .card .label {
+      color: var(--muted);
+      font-size: 0.86rem;
+      margin-bottom: 6px;
+    }
+    .card .value {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+    .section {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #ece4d9;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f6f1e8;
+      color: #32404c;
+      position: sticky;
+      top: 0;
+    }
+    .table-wrap {
+      overflow: auto;
+      max-height: 360px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+    .files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .files a {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      text-decoration: none;
+      color: var(--accent);
+      border: 1px solid rgba(15, 118, 110, 0.25);
+      background: rgba(15, 118, 110, 0.06);
+    }
+    pre {
+      margin: 0;
+      padding: 14px;
+      border-radius: 14px;
+      background: #171e23;
+      color: #e7f1f0;
+      overflow: auto;
+    }
+    @media (max-width: 960px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .row-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <h1>Insider Form 4 Event Study</h1>
+      <p class="lede">Fetch official SEC Form 4 filings, pull daily price history, vary your signal rules, and review whether clustered insider buying outperformed <code>SPY</code> across the horizons that matter to you.</p>
+    </section>
+
+    <div class="layout">
+      <aside class="panel">
+        <h2>Study Controls</h2>
+        <div class="form-grid">
+          <label>
+            Run name
+            <input id="run_name" value="form4-v1">
+          </label>
+
+          <label>
+            SEC User-Agent
+            <input id="user_agent" placeholder="Alex Christensen alex@example.com">
+          </label>
+
+          <p class="hint">SEC requests a real identifying User-Agent. This should include your name and email.</p>
+
+          <div class="row-2">
+            <label>
+              Start date
+              <input id="start_date" type="date" value="2024-01-01">
+            </label>
+            <label>
+              End date
+              <input id="end_date" type="date" value="2024-03-31">
+            </label>
+          </div>
+
+          <label>
+            Optional ticker filter
+            <textarea id="tickers" placeholder="AAPL, MSFT, NVDA"></textarea>
+          </label>
+
+          <div class="row-2">
+            <label>
+              Max SEC filings
+              <input id="max_filings" type="number" value="250" min="1">
+            </label>
+            <label>
+              Benchmark
+              <input id="benchmark" value="SPY">
+            </label>
+          </div>
+
+          <h3>Signal Rules</h3>
+          <div class="row-2">
+            <label>
+              Window days
+              <input id="window_days" type="number" value="30" min="1">
+            </label>
+            <label>
+              Cooldown days
+              <input id="cooldown_days" type="number" value="90" min="1">
+            </label>
+          </div>
+
+          <div class="row-2">
+            <label>
+              Min distinct insiders
+              <input id="min_distinct_insiders" type="number" value="2" min="1">
+            </label>
+            <label>
+              Min total value
+              <input id="min_total_value" type="number" value="100000" step="1000" min="0">
+            </label>
+          </div>
+
+          <div class="row-2">
+            <label>
+              Min price
+              <input id="min_price" type="number" value="5" step="0.01" min="0">
+            </label>
+            <label>
+              Min avg daily $ volume
+              <input id="min_daily_dollar_volume" type="number" value="1000000" step="10000" min="0">
+            </label>
+          </div>
+
+          <div class="row-2">
+            <label>
+              Volume lookback days
+              <input id="lookback_days" type="number" value="20" min="1">
+            </label>
+            <label>
+              Min market cap
+              <input id="min_market_cap" type="number" value="100000000" step="1000000" min="0">
+            </label>
+          </div>
+
+          <button id="run_button">Fetch Data And Run Study</button>
+          <div id="status" class="status">Ready.</div>
+        </div>
+      </aside>
+
+      <main class="panel">
+        <div class="section">
+          <h2>Results</h2>
+          <div id="cards" class="cards"></div>
+        </div>
+
+        <div class="section">
+          <h3>Output Files</h3>
+          <div id="files" class="files"></div>
+        </div>
+
+        <div class="section">
+          <h3>Horizon Summary</h3>
+          <div id="summary_table" class="table-wrap"></div>
+        </div>
+
+        <div class="section">
+          <h3>Segmented Analysis</h3>
+          <div id="segment_table" class="table-wrap"></div>
+        </div>
+
+        <div class="section">
+          <h3>Top Qualified Events By 63-Day Excess Return</h3>
+          <div id="events_table" class="table-wrap"></div>
+        </div>
+
+        <div class="section">
+          <h3>Console Summary</h3>
+          <pre id="console_summary">Run a study to see results.</pre>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const fields = [
+      "run_name",
+      "user_agent",
+      "start_date",
+      "end_date",
+      "tickers",
+      "max_filings",
+      "benchmark",
+      "window_days",
+      "cooldown_days",
+      "min_distinct_insiders",
+      "min_total_value",
+      "min_price",
+      "min_daily_dollar_volume",
+      "lookback_days",
+      "min_market_cap"
+    ];
+
+    const statusNode = document.getElementById("status");
+    const runButton = document.getElementById("run_button");
+
+    function setStatus(message, isError = false) {
+      statusNode.textContent = message;
+      statusNode.className = isError ? "status error" : "status";
+    }
+
+    function collectPayload() {
+      const payload = {};
+      for (const id of fields) {
+        payload[id] = document.getElementById(id).value;
+      }
+      return payload;
+    }
+
+    function renderTable(containerId, rows) {
+      const container = document.getElementById(containerId);
+      if (!rows || !rows.length) {
+        container.innerHTML = "<p class='hint'>No rows available.</p>";
+        return;
+      }
+      const columns = Object.keys(rows[0]);
+      const thead = `<thead><tr>${columns.map(column => `<th>${column}</th>`).join("")}</tr></thead>`;
+      const tbody = `<tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${row[column] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>`;
+      container.innerHTML = `<table>${thead}${tbody}</table>`;
+    }
+
+    function renderCards(result) {
+      const cards = document.getElementById("cards");
+      const items = [
+        ["SEC filings", result.download.processed_filing_count],
+        ["Insider rows", result.download.insider_rows],
+        ["Unique tickers", result.download.unique_ticker_count],
+        ["Qualified events", result.study.qualified_count],
+        ["Rejected", result.study.rejected_count],
+        ["Price tickers", result.download.price_ticker_count]
+      ];
+      cards.innerHTML = items.map(([label, value]) => `
+        <div class="card">
+          <div class="label">${label}</div>
+          <div class="value">${value}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderFiles(files) {
+      const container = document.getElementById("files");
+      container.innerHTML = Object.entries(files).map(([label, href]) => `
+        <a href="${href}" target="_blank" rel="noreferrer">${label}</a>
+      `).join("");
+    }
+
+    async function runStudy() {
+      setStatus("Fetching SEC filings, downloading prices, and running the study. This can take a while for larger ranges.");
+      runButton.disabled = true;
+
+      try {
+        const response = await fetch("/api/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(collectPayload())
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Study run failed.");
+        }
+
+        renderCards(result);
+        renderFiles(result.files);
+        renderTable("summary_table", result.study.summary_rows);
+        renderTable("segment_table", result.study.segment_rows);
+        renderTable("events_table", result.study.top_events_63d);
+        document.getElementById("console_summary").textContent = result.console_summary;
+
+        const missing = result.download.missing_price_tickers.length
+          ? ` Missing price tickers: ${result.download.missing_price_tickers.slice(0, 12).join(", ")}`
+          : "";
+        setStatus(`Run complete. Outputs written to ${result.run_dir}.${missing}`);
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        runButton.disabled = false;
+      }
+    }
+
+    runButton.addEventListener("click", runStudy);
+  </script>
+</body>
+</html>
