@@ -30,7 +30,7 @@ def slugify(value: str) -> str:
 
 
 def top_events(event_rows: list[dict[str, str]], horizon: int = 63, limit: int = 25) -> list[dict[str, str]]:
-    key = f"excess_return_{horizon}d"
+    key = f"bhar_return_{horizon}d"
     complete_key = f"complete_{horizon}d"
     filtered = [row for row in event_rows if row.get(complete_key) == "yes" and row.get(key)]
     filtered.sort(key=lambda row: float(row[key]), reverse=True)
@@ -59,16 +59,23 @@ def build_response(
         },
         "download": {
             "insider_rows": insider_result["row_count"],
+            "raw_insider_rows": insider_result["raw_row_count"],
+            "superseded_rows_removed": insider_result["superseded_row_count"],
             "processed_filing_count": insider_result["processed_filing_count"],
             "failed_filing_count": insider_result["failed_filing_count"],
             "unique_ticker_count": len(insider_result["unique_tickers"]),
+            "unique_issuer_count": len(insider_result["unique_issuers"]),
             "price_row_count": price_result["row_count"],
             "price_ticker_count": len(price_result["downloaded_tickers"]),
             "missing_price_tickers": price_result["missing_tickers"],
+            "adjusted_price_row_count": price_result["adjusted_price_row_count"],
+            "market_cap_row_count": price_result["market_cap_row_count"],
             "failed_filing_paths": insider_result["failed_filing_paths"],
+            "cache_dir": insider_result["cache_dir"],
         },
         "study": {
             "candidate_count": study_result["candidate_count"],
+            "raw_qualified_count": study_result["qualified_raw_count"],
             "qualified_count": study_result["qualified_count"],
             "rejected_count": study_result["rejected_count"],
             "benchmark": study_result["benchmark"],
@@ -76,6 +83,9 @@ def build_response(
             "segment_rows": study_result["segment_rows"],
             "top_events_63d": top_events(study_result["event_rows"], 63),
         },
+        "warnings": study_result["warnings"],
+        "coverage": study_result["coverage"],
+        "methodology": study_result["methodology"],
         "console_summary": insider_event_study.build_console_summary(study_result),
     }
 
@@ -191,6 +201,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             min_daily_dollar_volume=float(payload.get("min_daily_dollar_volume", 1000000.0) or 1000000.0),
             lookback_days=int(payload.get("lookback_days", 20) or 20),
             min_market_cap=float(payload.get("min_market_cap", 100000000.0) or 100000000.0),
+            entry_timing=str(payload.get("entry_timing", "next_session_close") or "next_session_close"),
         )
         return build_response(
             run_dir=run_dir,

@@ -76,10 +76,10 @@
       font-size: 0.92rem;
       color: var(--muted);
     }
-    input, textarea, button {
+    input, textarea, button, select {
       font: inherit;
     }
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -184,6 +184,30 @@
       color: var(--accent);
       border: 1px solid rgba(15, 118, 110, 0.25);
       background: rgba(15, 118, 110, 0.06);
+    }
+    .callouts {
+      display: grid;
+      gap: 10px;
+    }
+    .callout {
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #fff;
+    }
+    .callout.warn {
+      border-color: rgba(139, 30, 63, 0.2);
+      background: #fdf1f4;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .meta-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
     }
     pre {
       margin: 0;
@@ -298,6 +322,14 @@
             </label>
           </div>
 
+          <label>
+            Entry timing
+            <select id="entry_timing">
+              <option value="next_session_close" selected>next_session_close</option>
+              <option value="next_session_open">next_session_open</option>
+            </select>
+          </label>
+
           <button id="run_button">Fetch Data And Run Study</button>
           <div id="status" class="status">Ready.</div>
         </div>
@@ -307,6 +339,25 @@
         <div class="section">
           <h2>Results</h2>
           <div id="cards" class="cards"></div>
+        </div>
+
+        <div class="section">
+          <h3>Warnings</h3>
+          <div id="warnings" class="callouts"></div>
+        </div>
+
+        <div class="section">
+          <h3>Coverage And Methodology</h3>
+          <div class="meta-grid">
+            <div class="callout">
+              <h4>Coverage</h4>
+              <div id="coverage"></div>
+            </div>
+            <div class="callout">
+              <h4>Methodology</h4>
+              <div id="methodology"></div>
+            </div>
+          </div>
         </div>
 
         <div class="section">
@@ -325,7 +376,7 @@
         </div>
 
         <div class="section">
-          <h3>Top Qualified Events By 63-Day Excess Return</h3>
+          <h3>Top Primary Events By 63-Day BHAR</h3>
           <div id="events_table" class="table-wrap"></div>
         </div>
 
@@ -353,7 +404,8 @@
       "min_price",
       "min_daily_dollar_volume",
       "lookback_days",
-      "min_market_cap"
+      "min_market_cap",
+      "entry_timing"
     ];
 
     const statusNode = document.getElementById("status");
@@ -389,8 +441,10 @@
       const items = [
         ["SEC filings", result.download.processed_filing_count],
         ["Insider rows", result.download.insider_rows],
-        ["Unique tickers", result.download.unique_ticker_count],
-        ["Qualified events", result.study.qualified_count],
+        ["Unique issuers", result.download.unique_issuer_count],
+        ["Raw candidates", result.study.candidate_count],
+        ["Raw qualified", result.study.raw_qualified_count],
+        ["Primary events", result.study.qualified_count],
         ["Rejected", result.study.rejected_count],
         ["Price tickers", result.download.price_ticker_count]
       ];
@@ -400,6 +454,29 @@
           <div class="value">${value}</div>
         </div>
       `).join("");
+    }
+
+    function renderWarnings(warnings) {
+      const container = document.getElementById("warnings");
+      if (!warnings || !warnings.length) {
+        container.innerHTML = "<div class='callout'><strong>No active Stage 1 warnings.</strong></div>";
+        return;
+      }
+      container.innerHTML = warnings.map(warning => `
+        <div class="callout warn">${warning}</div>
+      `).join("");
+    }
+
+    function renderKeyValueList(containerId, data) {
+      const container = document.getElementById(containerId);
+      const rows = Object.entries(data || {});
+      if (!rows.length) {
+        container.innerHTML = "<p class='hint'>No details available.</p>";
+        return;
+      }
+      container.innerHTML = `<ul class="meta-list">${rows.map(([label, value]) => `
+        <li><strong>${label}</strong>: ${value}</li>
+      `).join("")}</ul>`;
     }
 
     function renderFiles(files) {
@@ -425,6 +502,9 @@
         }
 
         renderCards(result);
+        renderWarnings(result.warnings);
+        renderKeyValueList("coverage", result.coverage);
+        renderKeyValueList("methodology", result.methodology);
         renderFiles(result.files);
         renderTable("summary_table", result.study.summary_rows);
         renderTable("segment_table", result.study.segment_rows);

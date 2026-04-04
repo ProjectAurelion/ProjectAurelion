@@ -6,21 +6,22 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
-import json
-import re
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Optional
 
+from cache_utils import cache_path, read_or_fetch_bytes, read_or_fetch_text
+from form4_normalization import mark_superseded_amendments, parse_form4_rows
+from price_loader import fetch_yahoo_history
+
 SEC_ARCHIVES_URL = "https://www.sec.gov/Archives"
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 FORM_TYPES = {"4", "4/A"}
+TOOL_DIR = Path(__file__).resolve().parent
+CACHE_ROOT = TOOL_DIR / "cache"
 
 
 @dataclass(frozen=True)
@@ -43,36 +44,7 @@ def normalize_ticker(value: str) -> str:
 def parse_ticker_filter(raw: str) -> set[str]:
     if not raw.strip():
         return set()
-    tokens = re.split(r"[\s,]+", raw.strip())
-    return {normalize_ticker(token) for token in tokens if token.strip()}
-
-
-def local_name(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
-
-
-def first_child(element: Optional[ET.Element], name: str) -> Optional[ET.Element]:
-    if element is None:
-        return None
-    for child in list(element):
-        if local_name(child.tag) == name:
-            return child
-    return None
-
-
-def nested_text(element: Optional[ET.Element], *names: str) -> str:
-    current = element
-    for name in names:
-        current = first_child(current, name)
-        if current is None:
-            return ""
-    return (current.text or "").strip()
-
-
-def descendants(element: ET.Element, name: str) -> Iterable[ET.Element]:
-    for child in element.iter():
-        if local_name(child.tag) == name:
-            yield child
+    return {normalize_ticker(token) for token in raw.replace(",", " ").split() if token.strip()}
 
 
 def request_bytes(url: str, user_agent: str) -> bytes:
@@ -85,11 +57,11 @@ def request_bytes(url: str, user_agent: str) -> bytes:
         },
     )
     with urllib.request.urlopen(request, timeout=60) as response:
-        data = response.read()
+        payload = response.read()
         content_encoding = response.headers.get("Content-Encoding", "")
         if "gzip" in content_encoding.lower():
-            return gzip.decompress(data)
-        return data
+            return gzip.decompress(payload)
+        return payload
 
 
 def iter_quarters(start_date: date, end_date: date) -> Iterable[tuple[int, int]]:
@@ -105,10 +77,20 @@ def iter_quarters(start_date: date, end_date: date) -> Iterable[tuple[int, int]]
             quarter += 1
 
 
-def fetch_master_index(year: int, quarter: int, user_agent: str) -> list[FilingEntry]:
+def fetch_master_index(
+    year: int,
+    quarter: int,
+    user_agent: str,
+    *,
+    cache_root: Path = CACHE_ROOT,
+) -> list[FilingEntry]:
     url = f"{SEC_ARCHIVES_URL}/edgar/full-index/{year}/QTR{quarter}/master.gz"
-    raw = request_bytes(url, user_agent)
+    raw = read_or_fetch_bytes(
+        cache_path(cache_root, "sec/master-index", url, ".gz"),
+        lambda: request_bytes(url, user_agent),
+    )
     text = gzip.decompress(raw).decode("latin-1") if raw[:2] == b"\x1f\x8b" else raw.decode("latin-1")
+
     lines = text.splitlines()
     start_index = 0
     for index, line in enumerate(lines):
@@ -136,128 +118,23 @@ def fetch_master_index(year: int, quarter: int, user_agent: str) -> list[FilingE
     return entries
 
 
-def extract_form4_xml(filing_text: str) -> str:
-    matches = re.findall(r"<XML>(.*?)</XML>", filing_text, flags=re.DOTALL | re.IGNORECASE)
-    for match in matches:
-        if "<ownershipdocument" in match.lower():
-            return match.strip()
-    if "<ownershipdocument" in filing_text.lower():
-        start = filing_text.lower().find("<ownershipdocument")
-        end = filing_text.lower().rfind("</ownershipdocument>")
-        if start != -1 and end != -1:
-            end += len("</ownershipdocument>")
-            return filing_text[start:end].strip()
-    raise ValueError("Could not locate an ownershipDocument XML segment in the filing.")
-
-
-def build_owner_role(owner_relationship: Optional[ET.Element]) -> str:
-    if owner_relationship is None:
-        return ""
-
-    parts: list[str] = []
-    if nested_text(owner_relationship, "isDirector") == "1":
-        parts.append("Director")
-    if nested_text(owner_relationship, "isOfficer") == "1":
-        officer_title = nested_text(owner_relationship, "officerTitle")
-        parts.append(officer_title or "Officer")
-    if nested_text(owner_relationship, "isTenPercentOwner") == "1":
-        parts.append("10% Owner")
-    if nested_text(owner_relationship, "isOther") == "1":
-        parts.append(nested_text(owner_relationship, "otherText") or "Other")
-    return "; ".join(dict.fromkeys(part for part in parts if part))
-
-
-def parse_form4_rows(
-    *,
-    filing_entry: FilingEntry,
-    source_url: str,
-    xml_text: str,
-    ticker_filter: set[str],
-) -> list[dict[str, str]]:
-    root = ET.fromstring(xml_text)
-    ticker = normalize_ticker(nested_text(root, "issuer", "issuerTradingSymbol"))
-    if not ticker:
-        return []
-    if ticker_filter and ticker not in ticker_filter:
-        return []
-
-    issuer_name = nested_text(root, "issuer", "issuerName")
-    issuer_cik = nested_text(root, "issuer", "issuerCik")
-
-    owners: list[dict[str, str]] = []
-    for owner in descendants(root, "reportingOwner"):
-        owner_name = nested_text(owner, "reportingOwnerId", "rptOwnerName")
-        owner_cik = nested_text(owner, "reportingOwnerId", "rptOwnerCik")
-        role = build_owner_role(first_child(owner, "reportingOwnerRelationship"))
-        owners.append(
-            {
-                "insider_id": owner_cik or owner_name,
-                "insider_name": owner_name,
-                "insider_role": role,
-            }
-        )
-
-    if not owners:
-        return []
-
-    rows: list[dict[str, str]] = []
-    for transaction in descendants(root, "nonDerivativeTransaction"):
-        transaction_code = nested_text(transaction, "transactionCoding", "transactionCode").upper()
-        acquired_disposed = nested_text(
-            transaction,
-            "transactionAmounts",
-            "transactionAcquiredDisposedCode",
-            "value",
-        ).upper()
-        if transaction_code != "P":
-            continue
-        if acquired_disposed and acquired_disposed != "A":
-            continue
-
-        security_type = nested_text(transaction, "securityTitle", "value")
-        transaction_date = nested_text(transaction, "transactionDate", "value")
-        shares = nested_text(transaction, "transactionAmounts", "transactionShares", "value")
-        price = nested_text(transaction, "transactionAmounts", "transactionPricePerShare", "value")
-
-        shares_float = float(shares) if shares else None
-        price_float = float(price) if price else None
-        total_value = shares_float * price_float if shares_float is not None and price_float is not None else None
-
-        for owner in owners:
-            rows.append(
-                {
-                    "filing_date": filing_entry.filing_date.isoformat(),
-                    "transaction_date": transaction_date,
-                    "ticker": ticker,
-                    "issuer_name": issuer_name,
-                    "issuer_cik": issuer_cik,
-                    "insider_id": owner["insider_id"],
-                    "insider_name": owner["insider_name"],
-                    "insider_role": owner["insider_role"],
-                    "transaction_code": transaction_code,
-                    "transaction_type": "Open Market Purchase",
-                    "security_type": security_type,
-                    "shares": shares,
-                    "price": price,
-                    "total_value": f"{total_value:.6f}" if total_value is not None else "",
-                    "source_url": source_url,
-                }
-            )
-    return rows
-
-
 def fetch_filing_transactions(
     filing_entry: FilingEntry,
     user_agent: str,
     ticker_filter: set[str],
+    *,
+    cache_root: Path = CACHE_ROOT,
 ) -> list[dict[str, str]]:
     source_url = f"{SEC_ARCHIVES_URL}/{filing_entry.path}"
-    filing_text = request_bytes(source_url, user_agent).decode("utf-8", errors="ignore")
-    xml_text = extract_form4_xml(filing_text)
+    filing_text = read_or_fetch_text(
+        cache_path(cache_root, "sec/filings", source_url, ".txt"),
+        lambda: request_bytes(source_url, user_agent).decode("utf-8", errors="ignore"),
+    )
     return parse_form4_rows(
-        filing_entry=filing_entry,
+        filing_date=filing_entry.filing_date.isoformat(),
+        form_type=filing_entry.form_type,
         source_url=source_url,
-        xml_text=xml_text,
+        filing_text=filing_text,
         ticker_filter=ticker_filter,
     )
 
@@ -270,6 +147,27 @@ def write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> 
         writer.writerows(rows)
 
 
+def dedupe_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen: set[tuple[str, ...]] = set()
+    deduped: list[dict[str, str]] = []
+    for row in rows:
+        key = (
+            row.get("accession", ""),
+            row.get("owner_group_id", ""),
+            row.get("transaction_table", ""),
+            row.get("transaction_date", ""),
+            row.get("transaction_code", ""),
+            row.get("security_type", ""),
+            row.get("shares", ""),
+            row.get("price", ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
+
+
 def download_form4_transactions(
     *,
     start_date: date,
@@ -279,120 +177,89 @@ def download_form4_transactions(
     ticker_filter: set[str],
     max_filings: Optional[int] = None,
     pause_seconds: float = 0.2,
+    cache_root: Path = CACHE_ROOT,
 ) -> dict[str, object]:
     filing_entries: list[FilingEntry] = []
     for year, quarter in iter_quarters(start_date, end_date):
-        filing_entries.extend(fetch_master_index(year, quarter, user_agent))
+        filing_entries.extend(fetch_master_index(year, quarter, user_agent, cache_root=cache_root))
 
-    filing_entries = [
-        entry for entry in filing_entries if start_date <= entry.filing_date <= end_date
-    ]
+    filing_entries = [entry for entry in filing_entries if start_date <= entry.filing_date <= end_date]
     filing_entries.sort(key=lambda entry: (entry.filing_date, entry.path))
     if max_filings is not None:
         filing_entries = filing_entries[:max_filings]
 
     rows: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str, str, str]] = set()
     processed_filings = 0
     failed_filings: list[str] = []
 
     for entry in filing_entries:
         try:
-            filing_rows = fetch_filing_transactions(entry, user_agent, ticker_filter)
+            rows.extend(fetch_filing_transactions(entry, user_agent, ticker_filter, cache_root=cache_root))
             processed_filings += 1
-            for row in filing_rows:
-                key = (
-                    row["source_url"],
-                    row["insider_id"],
-                    row["transaction_date"],
-                    row["shares"],
-                    row["price"],
-                )
-                if key in seen:
-                    continue
-                seen.add(key)
-                rows.append(row)
         except Exception:
             failed_filings.append(entry.path)
         time.sleep(pause_seconds)
 
-    rows.sort(key=lambda row: (row["ticker"], row["filing_date"], row["insider_id"]))
+    raw_row_count = len(rows)
+    rows, superseded_row_count = mark_superseded_amendments(rows)
+    rows = dedupe_rows(rows)
+    rows.sort(
+        key=lambda row: (
+            row.get("issuer_cik", ""),
+            row.get("ticker", ""),
+            row.get("filing_date", ""),
+            row.get("owner_group_id", ""),
+            row.get("transaction_date", ""),
+            row.get("accession", ""),
+        )
+    )
+
     fieldnames = [
+        "accession",
+        "form_type",
+        "is_amendment",
         "filing_date",
+        "acceptance_datetime",
+        "period_of_report",
+        "filing_lag_days",
         "transaction_date",
         "ticker",
         "issuer_name",
         "issuer_cik",
-        "insider_id",
-        "insider_name",
-        "insider_role",
+        "owner_group_id",
+        "owner_group_name",
+        "reported_owner_count",
+        "is_multi_owner_filing",
+        "canonical_role",
+        "role_detail",
+        "transaction_table",
         "transaction_code",
-        "transaction_type",
+        "acquired_disposed_code",
+        "transaction_classification",
+        "eligible_for_signal",
         "security_type",
+        "ownership_type",
+        "is_direct_ownership",
         "shares",
         "price",
         "total_value",
+        "data_quality_flags",
         "source_url",
     ]
     write_csv(output_csv, rows, fieldnames)
+
     return {
         "output_csv": output_csv,
         "row_count": len(rows),
+        "raw_row_count": raw_row_count,
+        "superseded_row_count": superseded_row_count,
         "processed_filing_count": processed_filings,
         "failed_filing_count": len(failed_filings),
         "failed_filing_paths": failed_filings[:25],
-        "unique_tickers": sorted({row["ticker"] for row in rows}),
+        "unique_tickers": sorted({row["ticker"] for row in rows if row.get("ticker")}),
+        "unique_issuers": sorted({row["issuer_cik"] for row in rows if row.get("issuer_cik")}),
+        "cache_dir": str(cache_root),
     }
-
-
-def fetch_yahoo_history(ticker: str, start_date: date, end_date: date) -> list[dict[str, str]]:
-    period1 = int(datetime.combine(start_date, datetime.min.time()).timestamp())
-    period2 = int(datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp())
-    query = urllib.parse.urlencode(
-        {
-            "period1": period1,
-            "period2": period2,
-            "interval": "1d",
-            "includeAdjustedClose": "true",
-            "events": "div,splits",
-        }
-    )
-    url = f"{YAHOO_CHART_URL}/{urllib.parse.quote(ticker)}?{query}"
-    request = urllib.request.Request(
-        url,
-        headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-    )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        payload = json.loads(response.read().decode("utf-8", errors="ignore"))
-
-    result = (payload.get("chart", {}).get("result") or [None])[0]
-    if not result:
-        return []
-
-    timestamps = result.get("timestamp") or []
-    quotes = ((result.get("indicators") or {}).get("quote") or [{}])[0]
-    opens = quotes.get("open") or []
-    highs = quotes.get("high") or []
-    lows = quotes.get("low") or []
-    closes = quotes.get("close") or []
-    volumes = quotes.get("volume") or []
-
-    rows: list[dict[str, str]] = []
-    for index, timestamp in enumerate(timestamps):
-        if index >= len(closes) or closes[index] is None:
-            continue
-        trading_date = datetime.fromtimestamp(timestamp, UTC).date()
-        rows.append(
-            {
-                "date": trading_date.isoformat(),
-                "open": "" if index >= len(opens) or opens[index] is None else str(opens[index]),
-                "high": "" if index >= len(highs) or highs[index] is None else str(highs[index]),
-                "low": "" if index >= len(lows) or lows[index] is None else str(lows[index]),
-                "close": str(closes[index]),
-                "volume": "" if index >= len(volumes) or volumes[index] is None else str(volumes[index]),
-            }
-        )
-    return rows
 
 
 def download_price_history(
@@ -405,6 +272,7 @@ def download_price_history(
     lookback_padding_days: int = 60,
     forward_padding_days: int = 400,
     pause_seconds: float = 0.1,
+    cache_root: Path = CACHE_ROOT,
 ) -> dict[str, object]:
     padded_start = start_date - timedelta(days=lookback_padding_days)
     padded_end = end_date + timedelta(days=forward_padding_days)
@@ -412,18 +280,23 @@ def download_price_history(
     all_rows: list[dict[str, str]] = []
     downloaded: list[str] = []
     missing: list[str] = []
+    adjusted_price_row_count = 0
+    market_cap_row_count = 0
 
     for ticker in sorted(set(tickers) | {normalize_ticker(benchmark_ticker)}):
         try:
-            rows = fetch_yahoo_history(ticker, padded_start, padded_end)
+            rows = fetch_yahoo_history(ticker, padded_start, padded_end, cache_root)
             if not rows:
                 missing.append(ticker)
                 continue
+
             kept_any = False
             for row in rows:
                 trading_date = parse_date(row.get("date", ""))
                 if trading_date < padded_start or trading_date > padded_end:
                     continue
+                adjusted_price_row_count += 1 if row.get("adj_close") else 0
+                market_cap_row_count += 1 if row.get("market_cap") else 0
                 all_rows.append(
                     {
                         "ticker": normalize_ticker(ticker),
@@ -432,8 +305,12 @@ def download_price_history(
                         "high": row.get("high", ""),
                         "low": row.get("low", ""),
                         "close": row.get("close", ""),
+                        "adj_open": row.get("adj_open", ""),
+                        "adj_high": row.get("adj_high", ""),
+                        "adj_low": row.get("adj_low", ""),
+                        "adj_close": row.get("adj_close", ""),
                         "volume": row.get("volume", ""),
-                        "market_cap": "",
+                        "market_cap": row.get("market_cap", ""),
                     }
                 )
                 kept_any = True
@@ -446,13 +323,29 @@ def download_price_history(
         time.sleep(pause_seconds)
 
     all_rows.sort(key=lambda row: (row["ticker"], row["date"]))
-    fieldnames = ["ticker", "date", "open", "high", "low", "close", "volume", "market_cap"]
+    fieldnames = [
+        "ticker",
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "adj_open",
+        "adj_high",
+        "adj_low",
+        "adj_close",
+        "volume",
+        "market_cap",
+    ]
     write_csv(output_csv, all_rows, fieldnames)
     return {
         "output_csv": output_csv,
         "row_count": len(all_rows),
         "downloaded_tickers": downloaded,
         "missing_tickers": missing,
+        "adjusted_price_row_count": adjusted_price_row_count,
+        "market_cap_row_count": market_cap_row_count,
+        "cache_dir": str(cache_root),
     }
 
 
@@ -515,11 +408,14 @@ def main() -> int:
     print(f"Insider rows: {insider_result['row_count']}")
     print(f"Processed SEC filings: {insider_result['processed_filing_count']}")
     print(f"Failed SEC filings: {insider_result['failed_filing_count']}")
+    print(f"Superseded amended rows removed: {insider_result['superseded_row_count']}")
     print(f"Unique tickers: {len(insider_result['unique_tickers'])}")
     print(f"Price rows: {price_result['row_count']}")
+    print(f"Adjusted-price rows: {price_result['adjusted_price_row_count']}")
     print(f"Price tickers downloaded: {len(price_result['downloaded_tickers'])}")
     if price_result["missing_tickers"]:
         print(f"Missing price tickers: {', '.join(price_result['missing_tickers'][:20])}")
+    print(f"SEC/price cache: {CACHE_ROOT}")
     print(f"Insider CSV: {insider_csv}")
     print(f"Prices CSV: {prices_csv}")
     return 0
