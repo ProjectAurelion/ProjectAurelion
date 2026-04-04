@@ -81,12 +81,12 @@ def assign_overlap_groups(
         group_index = 0
         start = 0
         while start < len(issuer_candidates):
+            anchor_date = issuer_candidates[start]["event_date"]
             group = [issuer_candidates[start]]
             end = start + 1
             while end < len(issuer_candidates):
-                previous = group[-1]["event_date"]
                 current = issuer_candidates[end]["event_date"]
-                if current <= previous + timedelta(days=cooldown_days):
+                if current <= anchor_date + timedelta(days=cooldown_days):
                     group.append(issuer_candidates[end])
                     end += 1
                 else:
@@ -96,12 +96,14 @@ def assign_overlap_groups(
                 group,
                 key=lambda item: (float(item["total_purchase_value"]), int(item["distinct_insiders"]), item["event_date"]),
             )
+            primary = group[0]
             group_id = f"{issuer_cik}-overlap-{group_index}"
             for item in group:
                 row = dict(item)
                 row["overlap_group_id"] = group_id
                 row["overlap_group_size"] = len(group)
-                row["is_primary_event"] = "yes" if item is strongest else "no"
+                row["is_primary_event"] = "yes" if item is primary else "no"
+                row["is_strongest_in_overlap_group"] = "yes" if item is strongest else "no"
                 annotated.append(row)
             group_index += 1
             start = end

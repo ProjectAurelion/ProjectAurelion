@@ -106,6 +106,11 @@ class QualifiedEvent:
     overlap_group_id: str
     overlap_group_size: int
     adjusted_price_available: bool
+    investable_under_capacity: bool
+    max_position_size_at_adv_limit: float
+    adv_participation_rate: float
+    liquidity_bucket: str
+    microcap_bucket: str
     data_quality_flags: tuple[str, ...]
 
 
@@ -376,6 +381,46 @@ def size_bucket(market_cap: Optional[float]) -> str:
     return "$5b+"
 
 
+def liquidity_bucket(avg_dollar_volume: float) -> str:
+    if avg_dollar_volume < 2_500_000:
+        return "$1m-$2.5m ADV"
+    if avg_dollar_volume < 10_000_000:
+        return "$2.5m-$10m ADV"
+    return "$10m+ ADV"
+
+
+def microcap_bucket(market_cap: Optional[float], microcap_cutoff: float) -> str:
+    if market_cap is None:
+        return "unknown_market_cap"
+    if market_cap < microcap_cutoff:
+        return "microcap"
+    return "non_microcap"
+
+
+def net_return_after_costs(
+    gross_return: float,
+    *,
+    commission_bps_per_side: float,
+    slippage_bps_per_side: float,
+) -> float:
+    per_side_fraction = (commission_bps_per_side + slippage_bps_per_side) / 10000.0
+    return ((1.0 + gross_return) * (1.0 - per_side_fraction) / (1.0 + per_side_fraction)) - 1.0
+
+
+def horizon_completion_flag(
+    *,
+    stock_complete: bool,
+    benchmark_complete: bool,
+) -> str:
+    if stock_complete and benchmark_complete:
+        return "complete"
+    if not stock_complete and benchmark_complete:
+        return "potential_delisting_or_missing_price"
+    if stock_complete and not benchmark_complete:
+        return "benchmark_truncated"
+    return "truncated_dataset"
+
+
 def qualify_events(
     *,
     candidates: list[dict[str, object]],
@@ -386,6 +431,9 @@ def qualify_events(
     lookback_days: int,
     min_market_cap: float,
     entry_timing: str,
+    assumed_position_size: float,
+    max_adv_participation: float,
+    microcap_cutoff: float,
 ) -> tuple[list[QualifiedEvent], list[QualifiedEvent], list[dict[str, str]], dict[str, object]]:
     if entry_timing not in ENTRY_TIMINGS:
         raise ValueError(f"Unsupported entry timing: {entry_timing}")
@@ -419,6 +467,11 @@ def qualify_events(
         market_cap = None
         adjusted_price_available = False
         entry_price_proxy_flag = ""
+        investable_under_capacity = False
+        max_position_size_at_adv_limit = None
+        adv_participation_rate = None
+        event_liquidity_bucket = ""
+        event_microcap_bucket = "unknown_market_cap"
 
         if series is None:
             rejection_reasons.append("missing_price_history")
@@ -456,6 +509,12 @@ def qualify_events(
                 market_cap_value = float(series.market_cap[entry_index])
                 market_cap = None if math.isnan(market_cap_value) else market_cap_value
                 adjusted_price_available = bool(series.adjusted_price_coverage[entry_index] > 0)
+                if avg_dollar_volume is not None and avg_dollar_volume > 0:
+                    max_position_size_at_adv_limit = avg_dollar_volume * max_adv_participation
+                    adv_participation_rate = assumed_position_size / avg_dollar_volume
+                    investable_under_capacity = assumed_position_size <= max_position_size_at_adv_limit
+                    event_liquidity_bucket = liquidity_bucket(avg_dollar_volume)
+                event_microcap_bucket = microcap_bucket(market_cap, microcap_cutoff)
 
                 if entry_raw_price <= min_price:
                     rejection_reasons.append(f"entry_price_lte_{min_price:g}")
@@ -493,6 +552,7 @@ def qualify_events(
             "overlap_group_id": str(candidate["overlap_group_id"]),
             "overlap_group_size": str(candidate["overlap_group_size"]),
             "is_primary_event": str(candidate["is_primary_event"]),
+            "is_strongest_in_overlap_group": str(candidate.get("is_strongest_in_overlap_group", "")),
             "data_quality_flags": str(candidate["data_quality_flags"]),
             "entry_date": entry_date,
             "entry_raw_price": format_number(entry_raw_price),
@@ -504,6 +564,13 @@ def qualify_events(
             "market_cap_filter_active": "yes" if market_cap is not None else "no",
             "adjusted_price_available": "yes" if adjusted_price_available else "no",
             "entry_price_proxy_flag": entry_price_proxy_flag,
+            "assumed_position_size": format_number(assumed_position_size),
+            "max_position_size_at_adv_limit": format_number(max_position_size_at_adv_limit),
+            "adv_participation_rate": format_number(adv_participation_rate),
+            "max_adv_participation": format_number(max_adv_participation),
+            "investable_under_capacity": "yes" if investable_under_capacity else "no",
+            "liquidity_bucket": event_liquidity_bucket,
+            "microcap_bucket": event_microcap_bucket,
             "qualified_for_study": "yes" if not rejection_reasons else "no",
             "included_in_primary_study": "yes"
             if not rejection_reasons and candidate["is_primary_event"] == "yes"
@@ -541,16 +608,24 @@ def qualify_events(
             overlap_group_id=str(candidate["overlap_group_id"]),
             overlap_group_size=int(candidate["overlap_group_size"]),
             adjusted_price_available=adjusted_price_available,
+            investable_under_capacity=investable_under_capacity,
+            max_position_size_at_adv_limit=float(max_position_size_at_adv_limit or 0.0),
+            adv_participation_rate=float(adv_participation_rate or 0.0),
+            liquidity_bucket=event_liquidity_bucket,
+            microcap_bucket=event_microcap_bucket,
             data_quality_flags=join_flags(str(candidate["data_quality_flags"]), entry_price_proxy_flag),
         )
         raw_qualified.append(event)
         if candidate["is_primary_event"] == "yes":
             primary_qualified.append(event)
 
+    primary_investable_count = sum(1 for event in primary_qualified if event.investable_under_capacity)
     coverage = {
         "raw_candidate_count": len(candidates),
         "raw_qualified_event_count": len(raw_qualified),
         "primary_qualified_event_count": len(primary_qualified),
+        "primary_investable_event_count": primary_investable_count,
+        "primary_capacity_constrained_event_count": len(primary_qualified) - primary_investable_count,
         "overlap_group_count": len({row["overlap_group_id"] for row in candidate_rows}),
         "secondary_overlap_candidate_count": sum(1 for row in candidate_rows if row["is_primary_event"] == "no"),
         "candidate_market_cap_coverage_pct": (market_cap_available_count / len(candidate_rows) * 100.0)
@@ -562,6 +637,9 @@ def qualify_events(
         "candidate_timing_ambiguous_pct": (timing_ambiguous_count / len(candidate_rows) * 100.0) if candidate_rows else 0.0,
         "excluded_for_invalid_price_or_liquidity_count": invalid_price_or_liquidity_count,
         "market_cap_filter_active": market_cap_available_count > 0,
+        "assumed_position_size": assumed_position_size,
+        "max_adv_participation_pct": max_adv_participation * 100.0,
+        "primary_investable_pct": (primary_investable_count / len(primary_qualified) * 100.0) if primary_qualified else 0.0,
     }
     return raw_qualified, primary_qualified, candidate_rows, coverage
 
@@ -572,13 +650,21 @@ def build_output_tables(
     bars_by_ticker: dict[str, list[PriceBar]],
     benchmark_ticker: str,
     lookback_days: int,
-) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
+    commission_bps_per_side: float,
+    slippage_bps_per_side: float,
+) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], dict[str, int]]:
     aligned = {ticker: build_aligned_series(bars, lookback_days) for ticker, bars in bars_by_ticker.items()}
     benchmark_series = aligned[benchmark_ticker]
 
     event_rows: list[dict[str, str]] = []
-    horizon_observations: dict[int, list[dict[str, float]]] = {horizon: [] for horizon in HORIZONS}
-    segment_observations: dict[tuple[int, str, str], list[dict[str, float]]] = {}
+    horizon_observations: dict[tuple[str, int], list[dict[str, float]]] = {}
+    segment_observations: dict[tuple[str, int, str, str], list[dict[str, float]]] = {}
+    horizon_status_counts: dict[str, int] = {
+        "complete": 0,
+        "potential_delisting_or_missing_price": 0,
+        "benchmark_truncated": 0,
+        "truncated_dataset": 0,
+    }
 
     for event in primary_events:
         series = aligned[event.ticker]
@@ -609,6 +695,11 @@ def build_output_tables(
             "overlap_group_id": event.overlap_group_id,
             "overlap_group_size": str(event.overlap_group_size),
             "adjusted_price_available": "yes" if event.adjusted_price_available else "no",
+            "investable_under_capacity": "yes" if event.investable_under_capacity else "no",
+            "max_position_size_at_adv_limit": format_number(event.max_position_size_at_adv_limit),
+            "adv_participation_rate": format_number(event.adv_participation_rate),
+            "liquidity_bucket": event.liquidity_bucket,
+            "microcap_bucket": event.microcap_bucket,
             "data_quality_flags": "; ".join(event.data_quality_flags),
         }
 
@@ -627,105 +718,159 @@ def build_output_tables(
             )
             bhar_return = ((1.0 + stock_return) / (1.0 + benchmark_return)) - 1.0
             arithmetic_excess = stock_return - benchmark_return
+            net_stock_return = net_return_after_costs(
+                stock_return,
+                commission_bps_per_side=commission_bps_per_side,
+                slippage_bps_per_side=slippage_bps_per_side,
+            )
+            net_bhar_return = ((1.0 + net_stock_return) / (1.0 + benchmark_return)) - 1.0
             complete = stock_complete and benchmark_complete
+            horizon_flag = horizon_completion_flag(stock_complete=stock_complete, benchmark_complete=benchmark_complete)
+            horizon_status_counts[horizon_flag] = horizon_status_counts.get(horizon_flag, 0) + 1
 
             row[f"exit_date_{horizon}d"] = series.dates[stock_exit_index].isoformat()
             row[f"benchmark_exit_date_{horizon}d"] = benchmark_series.dates[benchmark_exit_index].isoformat()
             row[f"raw_return_{horizon}d"] = format_number(stock_return)
             row[f"benchmark_return_{horizon}d"] = format_number(benchmark_return)
             row[f"bhar_return_{horizon}d"] = format_number(bhar_return)
+            row[f"net_raw_return_{horizon}d"] = format_number(net_stock_return)
+            row[f"net_bhar_return_{horizon}d"] = format_number(net_bhar_return)
             row[f"arithmetic_excess_return_{horizon}d"] = format_number(arithmetic_excess)
             row[f"complete_{horizon}d"] = "yes" if complete else "no"
+            row[f"horizon_flag_{horizon}d"] = horizon_flag
 
             if complete:
                 observation = {
                     "raw_return": stock_return,
                     "benchmark_return": benchmark_return,
                     "bhar_return": bhar_return,
+                    "net_raw_return": net_stock_return,
+                    "net_bhar_return": net_bhar_return,
                     "arithmetic_excess_return": arithmetic_excess,
                 }
-                horizon_observations[horizon].append(observation)
+                horizon_observations.setdefault(("all_primary", horizon), []).append(observation)
+                if event.investable_under_capacity:
+                    horizon_observations.setdefault(("investable_primary", horizon), []).append(observation)
                 for segment_type, segment_name in (
                     ("insider_count_bucket", insider_count_bucket(event.distinct_insiders)),
                     ("purchase_value_bucket", purchase_value_bucket(event.total_purchase_value)),
                     ("size_bucket", size_bucket(event.market_cap)),
+                    ("liquidity_bucket", event.liquidity_bucket),
+                    ("microcap_bucket", event.microcap_bucket),
+                    ("investability", "investable" if event.investable_under_capacity else "capacity_constrained"),
                 ):
                     if not segment_name:
                         continue
-                    segment_observations.setdefault((horizon, segment_type, segment_name), []).append(observation)
+                    segment_observations.setdefault(("all_primary", horizon, segment_type, segment_name), []).append(observation)
+                    if event.investable_under_capacity:
+                        segment_observations.setdefault(("investable_primary", horizon, segment_type, segment_name), []).append(observation)
 
         event_rows.append(row)
 
     summary_rows: list[dict[str, str]] = []
-    for horizon in HORIZONS:
-        observations = horizon_observations[horizon]
-        raw_returns = [item["raw_return"] for item in observations]
-        benchmark_returns = [item["benchmark_return"] for item in observations]
-        bhar_returns = [item["bhar_return"] for item in observations]
-        arithmetic_excess = [item["arithmetic_excess_return"] for item in observations]
+    for sample_name in ("all_primary", "investable_primary"):
+        for horizon in HORIZONS:
+            observations = horizon_observations.get((sample_name, horizon), [])
+            raw_returns = [item["raw_return"] for item in observations]
+            benchmark_returns = [item["benchmark_return"] for item in observations]
+            bhar_returns = [item["bhar_return"] for item in observations]
+            net_raw_returns = [item["net_raw_return"] for item in observations]
+            net_bhar_returns = [item["net_bhar_return"] for item in observations]
+            arithmetic_excess = [item["arithmetic_excess_return"] for item in observations]
 
-        raw_summary = summarize_numeric(raw_returns)
-        benchmark_summary = summarize_numeric(benchmark_returns)
-        bhar_summary = summarize_numeric(bhar_returns)
-        t_stat, p_value = one_sample_ttest(bhar_returns)
-        ci_low, ci_high = bootstrap_mean_ci(bhar_returns)
-        warning_flags = sample_warning_flags(len(bhar_returns))
-        positive_rate = (
-            sum(1 for item in bhar_returns if item > 0) / len(bhar_returns)
-            if bhar_returns
-            else None
-        )
+            raw_summary = summarize_numeric(raw_returns)
+            benchmark_summary = summarize_numeric(benchmark_returns)
+            bhar_summary = summarize_numeric(bhar_returns)
+            net_raw_summary = summarize_numeric(net_raw_returns)
+            net_bhar_summary = summarize_numeric(net_bhar_returns)
+            t_stat, p_value = one_sample_ttest(bhar_returns)
+            ci_low, ci_high = bootstrap_mean_ci(bhar_returns)
+            net_t_stat, net_p_value = one_sample_ttest(net_bhar_returns)
+            net_ci_low, net_ci_high = bootstrap_mean_ci(net_bhar_returns)
+            warning_flags = sample_warning_flags(len(bhar_returns))
+            positive_rate = (
+                sum(1 for item in bhar_returns if item > 0) / len(bhar_returns)
+                if bhar_returns
+                else None
+            )
+            positive_net_rate = (
+                sum(1 for item in net_bhar_returns if item > 0) / len(net_bhar_returns)
+                if net_bhar_returns
+                else None
+            )
 
-        summary_rows.append(
-            {
-                "horizon_days": str(horizon),
-                "primary_event_count": str(len(primary_events)),
-                "complete_event_count": str(len(observations)),
-                "positive_bhar_rate": format_number(positive_rate),
-                "mean_raw_return": format_number(raw_summary["mean"]),
-                "mean_benchmark_return": format_number(benchmark_summary["mean"]),
-                "mean_bhar_return": format_number(bhar_summary["mean"]),
-                "median_bhar_return": format_number(bhar_summary["median"]),
-                "bhar_stddev": format_number(bhar_summary["stddev"]),
-                "bhar_p25": format_number(bhar_summary["p25"]),
-                "bhar_p75": format_number(bhar_summary["p75"]),
-                "mean_arithmetic_excess_return": format_number(
-                    summarize_numeric(arithmetic_excess)["mean"] if arithmetic_excess else None
-                ),
-                "t_statistic": format_number(t_stat),
-                "p_value": format_number(p_value),
-                "bootstrap_ci_low": format_number(ci_low),
-                "bootstrap_ci_high": format_number(ci_high),
-                "warning_flags": "; ".join(warning_flags),
-            }
-        )
+            summary_rows.append(
+                {
+                    "sample_name": sample_name,
+                    "horizon_days": str(horizon),
+                    "primary_event_count": str(len(primary_events)),
+                    "complete_event_count": str(len(observations)),
+                    "positive_bhar_rate": format_number(positive_rate),
+                    "positive_net_bhar_rate": format_number(positive_net_rate),
+                    "mean_raw_return": format_number(raw_summary["mean"]),
+                    "mean_net_raw_return": format_number(net_raw_summary["mean"]),
+                    "mean_benchmark_return": format_number(benchmark_summary["mean"]),
+                    "mean_bhar_return": format_number(bhar_summary["mean"]),
+                    "median_bhar_return": format_number(bhar_summary["median"]),
+                    "mean_net_bhar_return": format_number(net_bhar_summary["mean"]),
+                    "median_net_bhar_return": format_number(net_bhar_summary["median"]),
+                    "bhar_stddev": format_number(bhar_summary["stddev"]),
+                    "bhar_p25": format_number(bhar_summary["p25"]),
+                    "bhar_p75": format_number(bhar_summary["p75"]),
+                    "mean_arithmetic_excess_return": format_number(
+                        summarize_numeric(arithmetic_excess)["mean"] if arithmetic_excess else None
+                    ),
+                    "t_statistic": format_number(t_stat),
+                    "p_value": format_number(p_value),
+                    "bootstrap_ci_low": format_number(ci_low),
+                    "bootstrap_ci_high": format_number(ci_high),
+                    "net_t_statistic": format_number(net_t_stat),
+                    "net_p_value": format_number(net_p_value),
+                    "net_bootstrap_ci_low": format_number(net_ci_low),
+                    "net_bootstrap_ci_high": format_number(net_ci_high),
+                    "warning_flags": "; ".join(warning_flags),
+                }
+            )
 
     segment_rows: list[dict[str, str]] = []
-    for (horizon, segment_type, segment_name), observations in sorted(segment_observations.items()):
+    for (sample_name, horizon, segment_type, segment_name), observations in sorted(segment_observations.items()):
         bhar_returns = [item["bhar_return"] for item in observations]
+        net_bhar_returns = [item["net_bhar_return"] for item in observations]
         summary = summarize_numeric(bhar_returns)
+        net_summary = summarize_numeric(net_bhar_returns)
         t_stat, p_value = one_sample_ttest(bhar_returns)
         ci_low, ci_high = bootstrap_mean_ci(bhar_returns)
+        net_t_stat, net_p_value = one_sample_ttest(net_bhar_returns)
+        net_ci_low, net_ci_high = bootstrap_mean_ci(net_bhar_returns)
         warning_flags = sample_warning_flags(len(bhar_returns))
         positive_rate = sum(1 for item in bhar_returns if item > 0) / len(bhar_returns) if bhar_returns else None
+        positive_net_rate = sum(1 for item in net_bhar_returns if item > 0) / len(net_bhar_returns) if net_bhar_returns else None
         segment_rows.append(
             {
+                "sample_name": sample_name,
                 "horizon_days": str(horizon),
                 "segment_type": segment_type,
                 "segment_name": segment_name,
                 "complete_event_count": str(len(observations)),
                 "positive_bhar_rate": format_number(positive_rate),
+                "positive_net_bhar_rate": format_number(positive_net_rate),
                 "mean_bhar_return": format_number(summary["mean"]),
                 "median_bhar_return": format_number(summary["median"]),
+                "mean_net_bhar_return": format_number(net_summary["mean"]),
+                "median_net_bhar_return": format_number(net_summary["median"]),
                 "t_statistic": format_number(t_stat),
                 "p_value": format_number(p_value),
                 "bootstrap_ci_low": format_number(ci_low),
                 "bootstrap_ci_high": format_number(ci_high),
+                "net_t_statistic": format_number(net_t_stat),
+                "net_p_value": format_number(net_p_value),
+                "net_bootstrap_ci_low": format_number(net_ci_low),
+                "net_bootstrap_ci_high": format_number(net_ci_high),
                 "warning_flags": "; ".join(warning_flags),
             }
         )
 
-    return event_rows, summary_rows, segment_rows
+    return event_rows, summary_rows, segment_rows, horizon_status_counts
 
 
 def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
@@ -763,6 +908,20 @@ def build_warnings(
         warnings.append(
             f"{coverage['excluded_for_invalid_price_or_liquidity_count']} candidates were excluded for missing sessions, price, liquidity, or benchmark alignment."
         )
+    if float(coverage.get("primary_investable_pct", 0.0)) < 70.0 and int(coverage.get("primary_qualified_event_count", 0)) > 0:
+        warnings.append(
+            f"Only {float(coverage['primary_investable_pct']):.1f}% of primary events meet the assumed capacity limit of {float(coverage['max_adv_participation_pct']):.1f}% ADV."
+        )
+    if int(coverage.get("potential_delisting_or_missing_count", 0)) > 0:
+        warnings.append(
+            f"{coverage['potential_delisting_or_missing_count']} event-horizon observations ended early and may reflect delisting or missing price history."
+        )
+    if float(coverage["candidate_market_cap_coverage_pct"]) == 0.0:
+        warnings.append("Microcap separation is unavailable because market-cap coverage is currently zero.")
+    elif float(coverage["candidate_market_cap_coverage_pct"]) < 80.0:
+        warnings.append(
+            f"Microcap separation is only partially available because market-cap coverage is {float(coverage['candidate_market_cap_coverage_pct']):.1f}%."
+        )
     if any(row["complete_event_count"] and int(row["complete_event_count"]) < 10 for row in summary_rows):
         warnings.append("Formal inference is suppressed for any horizon with fewer than 10 complete primary events.")
     if any(10 <= int(row["complete_event_count"]) < 30 for row in summary_rows if row["complete_event_count"]):
@@ -781,28 +940,38 @@ def build_markdown_summary(
     summary_rows: list[dict[str, str]],
     coverage: dict[str, object],
     warnings: list[str],
+    entry_timing: str,
 ) -> None:
-    complete_rows = [row for row in summary_rows if row["complete_event_count"] and int(row["complete_event_count"]) > 0]
+    complete_rows = [
+        row for row in summary_rows
+        if row["sample_name"] == "all_primary" and row["complete_event_count"] and int(row["complete_event_count"]) > 0
+    ]
+    investable_rows = [
+        row for row in summary_rows
+        if row["sample_name"] == "investable_primary" and row["complete_event_count"] and int(row["complete_event_count"]) > 0
+    ]
     if not primary_events:
-        conclusion = "No primary qualified events passed the Stage 1 timing and tradability filters."
+        conclusion = "No primary qualified events passed the current timing, tradability, and data-quality filters."
     elif not complete_rows:
         conclusion = "Primary qualified events exist, but the current price history does not yet support complete forward-return horizons."
     elif any(int(row["complete_event_count"]) < 10 for row in complete_rows):
         conclusion = "The study now controls overlap and timing more carefully, but the current complete-event sample is still too small for formal inference."
-    elif sum(float(row["mean_bhar_return"] or "0") > 0 for row in complete_rows) >= 2:
-        conclusion = "The de-overlapped primary-event set shows positive benchmark-relative BHAR in multiple horizons and warrants deeper robustness testing."
+    elif sum(float(row["mean_net_bhar_return"] or "0") > 0 for row in investable_rows) >= 2:
+        conclusion = "The investable primary-event subset shows positive net benchmark-relative BHAR in multiple horizons and warrants deeper robustness testing."
     else:
-        conclusion = "The Stage 1 primary-event results do not yet show a consistently strong benchmark-relative signal."
+        conclusion = "The practical Stage 2 view does not yet show a consistently strong net benchmark-relative signal after simple execution frictions."
 
     lines = [
         "# Insider Event Study Summary",
         "",
         f"* Benchmark: `{benchmark_ticker}`",
-        "* Event-study metric: benchmark-relative BHAR (primary), arithmetic excess return (secondary)",
-        "* Entry timing: next-session close after public disclosure",
+        "* Event-study metric: benchmark-relative BHAR (gross) and net BHAR after simple execution frictions",
+        f"* Entry timing: {entry_timing} after public disclosure",
         f"* Raw cluster candidates: {len(candidate_rows)}",
         f"* Primary qualified events: {len(primary_events)}",
+        f"* Investable primary events: {coverage['primary_investable_event_count']}",
         f"* Overlap groups: {coverage['overlap_group_count']}",
+        f"* Capacity assumption: ${float(coverage['assumed_position_size']):,.0f} per event at <= {float(coverage['max_adv_participation_pct']):.1f}% ADV",
         "",
         "## Conclusion",
         "",
@@ -814,16 +983,16 @@ def build_markdown_summary(
     if warnings:
         lines.extend(f"* {warning}" for warning in warnings)
     else:
-        lines.append("* No Stage 1 warnings were triggered.")
+        lines.append("* No Stage 2 warnings were triggered.")
     lines.extend(
         [
             "",
             "## Output Files",
             "",
             "* `signal_candidates.csv`: raw cluster candidates with overlap, timing, and qualification flags",
-            "* `qualified_events.csv`: de-overlapped primary events with BHAR and benchmark-relative fields",
-            "* `results_summary.csv`: aggregate BHAR metrics and inference diagnostics by horizon",
-            "* `segmented_analysis.csv`: grouped BHAR metrics by cluster-strength buckets",
+            "* `qualified_events.csv`: de-overlapped primary events with gross/net BHAR, investability, and horizon-status fields",
+            "* `results_summary.csv`: aggregate gross/net BHAR metrics and inference diagnostics by horizon and sample",
+            "* `segmented_analysis.csv`: grouped gross/net BHAR metrics by cluster-strength and investability buckets",
         ]
     )
     output_dir.joinpath("summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -864,6 +1033,36 @@ def parse_args() -> argparse.Namespace:
         default="next_session_close",
         help="Conservative entry assumption. Default: next_session_close.",
     )
+    parser.add_argument(
+        "--commission-bps-per-side",
+        type=float,
+        default=0.0,
+        help="Estimated commissions and fees in basis points per side. Default: 0.",
+    )
+    parser.add_argument(
+        "--slippage-bps-per-side",
+        type=float,
+        default=10.0,
+        help="Estimated spread/slippage in basis points per side. Default: 10.",
+    )
+    parser.add_argument(
+        "--assumed-position-size",
+        type=float,
+        default=50000.0,
+        help="Assumed dollars deployed per event for investability diagnostics. Default: 50000.",
+    )
+    parser.add_argument(
+        "--max-adv-participation",
+        type=float,
+        default=0.1,
+        help="Maximum share of 20-day ADV used for the assumed position. Default: 0.10.",
+    )
+    parser.add_argument(
+        "--microcap-cutoff",
+        type=float,
+        default=300000000.0,
+        help="Market-cap cutoff used for microcap separation when market cap is available. Default: 300000000.",
+    )
     return parser.parse_args()
 
 
@@ -882,6 +1081,11 @@ def run_study(
     lookback_days: int = 20,
     min_market_cap: float = 100000000.0,
     entry_timing: str = "next_session_close",
+    commission_bps_per_side: float = 0.0,
+    slippage_bps_per_side: float = 10.0,
+    assumed_position_size: float = 50000.0,
+    max_adv_participation: float = 0.1,
+    microcap_cutoff: float = 300000000.0,
 ) -> dict[str, object]:
     trades = load_insider_trades(insider_csv)
     if not trades:
@@ -909,13 +1113,26 @@ def run_study(
         lookback_days=lookback_days,
         min_market_cap=min_market_cap,
         entry_timing=entry_timing,
+        assumed_position_size=assumed_position_size,
+        max_adv_participation=max_adv_participation,
+        microcap_cutoff=microcap_cutoff,
     )
 
-    event_rows, summary_rows, segment_rows = build_output_tables(
+    event_rows, summary_rows, segment_rows, horizon_status_counts = build_output_tables(
         primary_events=primary_qualified,
         bars_by_ticker=bars_by_ticker,
         benchmark_ticker=benchmark_ticker,
         lookback_days=lookback_days,
+        commission_bps_per_side=commission_bps_per_side,
+        slippage_bps_per_side=slippage_bps_per_side,
+    )
+    coverage.update(
+        {
+            "potential_delisting_or_missing_count": horizon_status_counts.get("potential_delisting_or_missing_price", 0),
+            "benchmark_truncated_count": horizon_status_counts.get("benchmark_truncated", 0),
+            "truncated_dataset_count": horizon_status_counts.get("truncated_dataset", 0),
+            "complete_event_horizon_count": horizon_status_counts.get("complete", 0),
+        }
     )
     warnings = build_warnings(coverage=coverage, summary_rows=summary_rows, candidate_rows=candidate_rows)
     methodology = {
@@ -924,7 +1141,13 @@ def run_study(
         "entry_timing": entry_timing,
         "same_day_execution": "disabled",
         "primary_sample": "de-overlapped primary events only",
+        "primary_selection_rule": "earliest candidate per cooldown group to avoid future-informed event selection",
         "inference_policy": "Formal inference suppressed for n < 10 and treated as exploratory for 10 <= n < 30.",
+        "commission_bps_per_side": commission_bps_per_side,
+        "slippage_bps_per_side": slippage_bps_per_side,
+        "assumed_position_size": assumed_position_size,
+        "max_adv_participation_pct": max_adv_participation * 100.0,
+        "note": "Net returns are event-level realism adjustments, not a portfolio simulation.",
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -940,6 +1163,7 @@ def run_study(
         summary_rows=summary_rows,
         coverage=coverage,
         warnings=warnings,
+        entry_timing=entry_timing,
     )
 
     return {
@@ -969,19 +1193,22 @@ def build_console_summary(result: dict[str, object]) -> str:
         f"Raw cluster candidates: {result['candidate_count']}",
         f"Qualified raw events: {result['qualified_raw_count']}",
         f"Primary qualified events: {result['qualified_count']}",
+        f"Investable primary events: {result['coverage']['primary_investable_event_count']}",
         f"Rejected raw candidates: {result['rejected_count']}",
         f"Overlap groups: {result['coverage']['overlap_group_count']}",
         "",
-        "By Horizon (primary events, BHAR)",
+        "By Horizon (primary events, gross/net BHAR)",
     ]
 
     for row in result["summary_rows"]:
+        if row["sample_name"] != "all_primary":
+            continue
         lines.append(
             "  "
             + f"{row['horizon_days']}d"
             + f" | complete={row['complete_event_count'] or '0'}"
             + f" | mean_bhar={row['mean_bhar_return'] or 'n/a'}"
-            + f" | median_bhar={row['median_bhar_return'] or 'n/a'}"
+            + f" | mean_net_bhar={row['mean_net_bhar_return'] or 'n/a'}"
             + f" | p_value={row['p_value'] or 'n/a'}"
             + f" | warnings={row['warning_flags'] or 'none'}"
         )
@@ -1006,6 +1233,11 @@ def main() -> int:
         lookback_days=args.lookback_days,
         min_market_cap=args.min_market_cap,
         entry_timing=args.entry_timing,
+        commission_bps_per_side=args.commission_bps_per_side,
+        slippage_bps_per_side=args.slippage_bps_per_side,
+        assumed_position_size=args.assumed_position_size,
+        max_adv_participation=args.max_adv_participation,
+        microcap_cutoff=args.microcap_cutoff,
     )
     print(build_console_summary(result))
     print(f"\nWrote study outputs to {args.output_dir}")

@@ -187,12 +187,18 @@ def test_run_study_uses_primary_events_and_bhar(tmp_path: Path) -> None:
     assert result["candidate_count"] == 2
     assert result["qualified_raw_count"] == 2
     assert result["qualified_count"] == 1
+    assert result["coverage"]["primary_investable_event_count"] == 1
     assert result["coverage"]["market_cap_filter_active"] is False
     assert "Market-cap filter is inactive" in " ".join(result["warnings"])
     assert "Formal inference is suppressed" in " ".join(result["warnings"])
 
     event_row = result["event_rows"][0]
-    summary_21d = next(row for row in result["summary_rows"] if row["horizon_days"] == "21")
+    summary_21d = next(
+        row for row in result["summary_rows"] if row["sample_name"] == "all_primary" and row["horizon_days"] == "21"
+    )
     assert event_row["complete_21d"] == "yes"
     assert math.isclose(float(summary_21d["mean_bhar_return"]), float(event_row["bhar_return_21d"]), rel_tol=1e-9)
+    assert float(event_row["net_bhar_return_21d"]) < float(event_row["bhar_return_21d"])
+    assert event_row["investable_under_capacity"] == "yes"
+    assert event_row["horizon_flag_21d"] == "complete"
     assert summary_21d["warning_flags"] == "insufficient_sample_for_inference"

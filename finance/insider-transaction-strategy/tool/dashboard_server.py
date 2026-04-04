@@ -30,7 +30,7 @@ def slugify(value: str) -> str:
 
 
 def top_events(event_rows: list[dict[str, str]], horizon: int = 63, limit: int = 25) -> list[dict[str, str]]:
-    key = f"bhar_return_{horizon}d"
+    key = f"net_bhar_return_{horizon}d"
     complete_key = f"complete_{horizon}d"
     filtered = [row for row in event_rows if row.get(complete_key) == "yes" and row.get(key)]
     filtered.sort(key=lambda row: float(row[key]), reverse=True)
@@ -77,6 +77,7 @@ def build_response(
             "candidate_count": study_result["candidate_count"],
             "raw_qualified_count": study_result["qualified_raw_count"],
             "qualified_count": study_result["qualified_count"],
+            "investable_count": study_result["coverage"]["primary_investable_event_count"],
             "rejected_count": study_result["rejected_count"],
             "benchmark": study_result["benchmark"],
             "summary_rows": study_result["summary_rows"],
@@ -202,6 +203,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             lookback_days=int(payload.get("lookback_days", 20) or 20),
             min_market_cap=float(payload.get("min_market_cap", 100000000.0) or 100000000.0),
             entry_timing=str(payload.get("entry_timing", "next_session_close") or "next_session_close"),
+            commission_bps_per_side=float(payload.get("commission_bps_per_side", 0.0) or 0.0),
+            slippage_bps_per_side=float(payload.get("slippage_bps_per_side", 10.0) or 10.0),
+            assumed_position_size=float(payload.get("assumed_position_size", 50000.0) or 50000.0),
+            max_adv_participation=float(payload.get("max_adv_participation", 0.1) or 0.1),
+            microcap_cutoff=float(payload.get("microcap_cutoff", 300000000.0) or 300000000.0),
         )
         return build_response(
             run_dir=run_dir,

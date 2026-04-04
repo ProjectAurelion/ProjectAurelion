@@ -330,6 +330,34 @@
             </select>
           </label>
 
+          <h3>Execution Assumptions</h3>
+          <div class="row-2">
+            <label>
+              Commission bps/side
+              <input id="commission_bps_per_side" type="number" value="0" step="0.1" min="0">
+            </label>
+            <label>
+              Slippage bps/side
+              <input id="slippage_bps_per_side" type="number" value="10" step="0.1" min="0">
+            </label>
+          </div>
+
+          <div class="row-2">
+            <label>
+              Assumed position size
+              <input id="assumed_position_size" type="number" value="50000" step="1000" min="0">
+            </label>
+            <label>
+              Max ADV participation
+              <input id="max_adv_participation" type="number" value="0.10" step="0.01" min="0" max="1">
+            </label>
+          </div>
+
+          <label>
+            Microcap cutoff
+            <input id="microcap_cutoff" type="number" value="300000000" step="1000000" min="0">
+          </label>
+
           <button id="run_button">Fetch Data And Run Study</button>
           <div id="status" class="status">Ready.</div>
         </div>
@@ -376,7 +404,7 @@
         </div>
 
         <div class="section">
-          <h3>Top Primary Events By 63-Day BHAR</h3>
+          <h3>Top Primary Events By 63-Day Net BHAR</h3>
           <div id="events_table" class="table-wrap"></div>
         </div>
 
@@ -405,7 +433,12 @@
       "min_daily_dollar_volume",
       "lookback_days",
       "min_market_cap",
-      "entry_timing"
+      "entry_timing",
+      "commission_bps_per_side",
+      "slippage_bps_per_side",
+      "assumed_position_size",
+      "max_adv_participation",
+      "microcap_cutoff"
     ];
 
     const statusNode = document.getElementById("status");
@@ -445,6 +478,7 @@
         ["Raw candidates", result.study.candidate_count],
         ["Raw qualified", result.study.raw_qualified_count],
         ["Primary events", result.study.qualified_count],
+        ["Investable", result.study.investable_count],
         ["Rejected", result.study.rejected_count],
         ["Price tickers", result.download.price_ticker_count]
       ];
