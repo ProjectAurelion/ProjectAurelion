@@ -1,0 +1,54 @@
+<SEC-DOCUMENT>
+<ACCEPTANCE-DATETIME>20240105183000
+<XML>
+<ownershipDocument>
+  <issuer>
+    <issuerCik>0001234567</issuerCik>
+    <issuerName>Example Corp</issuerName>
+    <issuerTradingSymbol>EXM</issuerTradingSymbol>
+  </issuer>
+  <reportingOwner>
+    <reportingOwnerId>
+      <rptOwnerCik>0001111111</rptOwnerCik>
+      <rptOwnerName>Alice Example</rptOwnerName>
+    </reportingOwnerId>
+    <reportingOwnerRelationship>
+      <isDirector>0</isDirector>
+      <isOfficer>1</isOfficer>
+      <isTenPercentOwner>0</isTenPercentOwner>
+      <isOther>0</isOther>
+      <officerTitle>Chief Executive Officer</officerTitle>
+    </reportingOwnerRelationship>
+  </reportingOwner>
+  <reportingOwner>
+    <reportingOwnerId>
+      <rptOwnerCik>0002222222</rptOwnerCik>
+      <rptOwnerName>Bob Example</rptOwnerName>
+    </reportingOwnerId>
+    <reportingOwnerRelationship>
+      <isDirector>1</isDirector>
+      <isOfficer>0</isOfficer>
+      <isTenPercentOwner>0</isTenPercentOwner>
+      <isOther>0</isOther>
+    </reportingOwnerRelationship>
+  </reportingOwner>
+  <periodOfReport>2024-01-05</periodOfReport>
+  <remarks></remarks>
+  <nonDerivativeTable>
+    <nonDerivativeTransaction>
+      <securityTitle><value>Common Stock</value></securityTitle>
+      <transactionDate><value>2024-01-05</value></transactionDate>
+      <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+      <transactionAmounts>
+        <transactionShares><value>1000</value></transactionShares>
+        <transactionPricePerShare><value>10</value></transactionPricePerShare>
+        <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+      </transactionAmounts>
+      <ownershipNature>
+        <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+      </ownershipNature>
+    </nonDerivativeTransaction>
+  </nonDerivativeTable>
+</ownershipDocument>
+</XML>
+</SEC-DOCUMENT>

@@ -1,0 +1,41 @@
+<SEC-DOCUMENT>
+<XML>
+<ownershipDocument>
+  <issuer>
+    <issuerCik>0007654321</issuerCik>
+    <issuerName>Plan Corp</issuerName>
+    <issuerTradingSymbol>PLN</issuerTradingSymbol>
+  </issuer>
+  <reportingOwner>
+    <reportingOwnerId>
+      <rptOwnerCik>0003333333</rptOwnerCik>
+      <rptOwnerName>Chris Plan</rptOwnerName>
+    </reportingOwnerId>
+    <reportingOwnerRelationship>
+      <isDirector>0</isDirector>
+      <isOfficer>1</isOfficer>
+      <isTenPercentOwner>0</isTenPercentOwner>
+      <isOther>0</isOther>
+      <officerTitle>Chief Financial Officer</officerTitle>
+    </reportingOwnerRelationship>
+  </reportingOwner>
+  <periodOfReport>2024-02-01</periodOfReport>
+  <remarks>Transaction executed pursuant to a Rule 10b5-1 trading plan.</remarks>
+  <nonDerivativeTable>
+    <nonDerivativeTransaction>
+      <securityTitle><value>Common Stock</value></securityTitle>
+      <transactionDate><value>2024-02-01</value></transactionDate>
+      <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+      <transactionAmounts>
+        <transactionShares><value>500</value></transactionShares>
+        <transactionPricePerShare><value>20</value></transactionPricePerShare>
+        <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+      </transactionAmounts>
+      <ownershipNature>
+        <directOrIndirectOwnership><value>I</value></directOrIndirectOwnership>
+      </ownershipNature>
+    </nonDerivativeTransaction>
+  </nonDerivativeTable>
+</ownershipDocument>
+</XML>
+</SEC-DOCUMENT>

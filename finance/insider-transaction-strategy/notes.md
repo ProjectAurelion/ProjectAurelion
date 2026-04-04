@@ -1,293 +1,242 @@
-# Development of a Systematic Insider-Trading Signal Strategy
+# Insider Transaction Strategy V1
 
-### 1. Objective
+## Objective
 
-The purpose of this project is to develop a **systematic methodology for identifying and executing equity trades based on insider purchasing behavior**. The primary objective is to create a **rules-based model** that identifies potential investment opportunities using publicly available insider transaction data, tests the effectiveness of those signals historically, and ultimately generates repeatable buy and sell decisions.
+The immediate goal of this project is to answer one question cleanly:
 
-The strategy is motivated by the hypothesis that **corporate insiders possess informational advantages about the future prospects of their companies**, and that significant insider purchases—particularly when multiple insiders buy simultaneously—may signal undervaluation or future positive developments.
+**Do clustered open-market insider purchases predict positive forward equity returns after the information becomes public?**
 
-This project seeks to evaluate whether those signals can be translated into a **structured and testable investment strategy**.
+Version 1 is a signal-validation project, not a full trading system. The first phase should determine whether the effect is real using a bias-aware event study built on free or public data sources. Portfolio construction, position sizing, and live execution decisions should only be added after the signal survives this first validation pass.
 
----
+## Working Hypothesis
 
-# 2. Hypothesis
+The core hypothesis is that discretionary insider buying contains useful information about future company performance, and that the signal becomes stronger when:
 
-The central hypothesis of the model is as follows:
+* more than one insider buys within a short period
+* total insider purchase value is meaningfully large
+* the buying occurs in stocks that are still liquid enough to trade
 
-**Cluster purchases by corporate insiders, particularly large purchases made by multiple executives within a short time window, provide a statistically meaningful signal that the underlying company may outperform the broader market over subsequent months.**
+V1 should test whether these clustered insider-buy events outperform a market benchmark over multiple forward holding horizons after the filings become public.
 
-More specifically, the hypothesis assumes that the following conditions increase signal strength:
+## Scope
 
-1. Multiple insiders purchasing shares within a short timeframe.
-2. Large dollar value purchases relative to typical executive compensation.
-3. Purchases occurring after significant declines in stock price.
-4. Signals occurring in companies with lower analyst coverage, typically small to mid-cap firms.
+This study is limited to:
 
-If these conditions are consistently associated with improved future performance, they may provide the basis for a **systematic investment strategy**.
+* US-listed common stocks
+* open-market purchase transactions only
+* publicly available or free data sources
+* event-level analysis using forward returns
 
----
+This study explicitly excludes, for V1:
 
-# 3. Data Sources
+* sell signals
+* stop losses or profit targets
+* portfolio sizing rules
+* overlap management between concurrent positions
+* live screening or automation
 
-To test this hypothesis, two primary categories of data are required.
+## Two-Stage Research Workflow
 
-## 3.1 Insider Transaction Data
+The project should proceed in two stages.
 
-Insider transactions in publicly traded companies are disclosed through **SEC regulatory filings**, specifically:
+### Stage 1: Signal Validation
 
-SEC Form 4
+Build a clean event dataset, measure forward returns, compare them to SPY, and determine whether the signal has enough evidence to justify deeper work.
 
-These filings report:
+### Stage 2: Portfolio Construction
 
-* Insider identity
-* Corporate role (CEO, CFO, Director, etc.)
-* Transaction type (purchase or sale)
-* Transaction date
-* Filing date
-* Shares traded
-* Price per share
-* Total transaction value
+Only after Stage 1 shows a credible edge should the project move into trade simulation, capital allocation, overlapping signals, and risk management. That work belongs later and should not influence the first-pass validation.
 
-For the purposes of systematic analysis, insider transaction data can be obtained through aggregation platforms such as:
+## Required Inputs
 
-* OpenInsider
-* Finviz Insider Trading
+V1 requires two research datasets.
 
-These services compile and normalize SEC filing data into structured datasets suitable for quantitative analysis.
+### Insider Transaction Table
 
----
+Minimum fields:
 
-## 3.2 Market Price Data
+* ticker
+* insider identifier or insider name
+* insider role
+* transaction code or transaction type
+* transaction date
+* filing date
+* shares purchased
+* transaction price
+* total transaction value
 
-To simulate trades and evaluate strategy performance, historical price data is required for all securities under consideration.
+### Daily Price Table
 
-Market data can be obtained via APIs such as:
+Minimum fields:
 
-* yfinance
+* date
+* open
+* high
+* low
+* close
+* volume
 
-Typical data fields include:
+If available, include market cap or shares outstanding so results can be segmented by company size, but market-cap availability is not a blocker for V1.
 
-* Date
-* Opening price
-* High / Low
-* Closing price
-* Volume
+## Signal Definition
 
-This data enables simulation of entry prices, stop losses, and holding periods.
+Each event in the V1 dataset should represent a qualifying cluster of insider buying activity.
 
----
+### Eligible Securities
 
-# 4. Analytical Tools
+Include:
 
-The model will be developed using the Python programming language and several widely used data analysis libraries.
+* US-listed common stocks
 
-## 4.1 Data Processing
+Exclude when identifiable from the source data:
 
-The primary data manipulation library will be:
+* ETFs
+* funds
+* preferred shares
+* warrants
+* rights
+* ADR variants if instrument identity is ambiguous
+* other obvious non-common-share instruments
 
-pandas
+### Eligible Transactions
 
-Pandas enables:
+Include:
 
-* Importing insider transaction datasets
-* Filtering transactions by criteria
-* Grouping transactions by company
-* Calculating rolling time windows
-* Aggregating insider purchase totals
+* open-market purchases only
 
-For example, pandas can identify companies where **multiple insiders purchased shares within a defined time period**.
+Exclude:
 
----
+* sales
+* option exercises
+* stock grants
+* automatic plan transactions
+* gifts
+* conversions
+* any non-discretionary or non-open-market activity
 
-## 4.2 Numerical Analysis
+### Event Timestamp
 
-Mathematical operations and return calculations will be performed using:
+Use the **filing date** as the event date.
 
-NumPy
+The trade entry proxy for return measurement is the first tradable market session after the public filing becomes available. V1 must not use transaction date as the trigger.
 
-NumPy allows efficient computation of:
+### Cluster Rules
 
-* daily returns
-* volatility
-* portfolio metrics
-* statistical indicators
+Create a signal when, within a rolling 30 calendar day window for the same ticker:
 
-These calculations are necessary for evaluating the profitability and risk profile of the strategy.
+* at least 2 distinct insiders have qualifying purchases
+* aggregate qualifying purchase value is at least $100,000
 
----
+Treat the event date as the filing date that first satisfies both conditions.
 
-## 4.3 Backtesting Framework
+### Cooldown Rule
 
-To simulate trades and evaluate portfolio performance, the project will utilize a backtesting engine such as:
+Apply a 90 calendar day cooldown per ticker after a signal is created.
 
-Backtrader
+This prevents one wave of insider buying from producing multiple highly overlapping events.
 
-Backtesting frameworks allow researchers to simulate:
+## Tradability Filters
 
-* trade execution
-* portfolio allocation
-* stop-loss rules
-* holding periods
-* profit targets
-* portfolio value over time
+Apply the following filters as of the event date:
 
-The framework ensures that the strategy is evaluated under **realistic historical conditions**.
+* stock price above $5
+* average daily dollar volume above $1,000,000 over the prior 20 trading days
+* market cap above $100,000,000 if market cap is available from the chosen source
 
----
+If market cap is not available in the initial data pipeline, do not drop observations for that reason. Instead, defer company-size segmentation until size data is added.
 
-# 5. Strategy Construction
+## Event Study Design
 
-The strategy consists of several components: signal identification, trade entry, exit rules, and portfolio management.
+V1 should evaluate signal quality with forward-return measurement rather than a portfolio backtest.
 
----
+### Entry Convention
 
-## 5.1 Signal Identification
+For each qualifying signal:
 
-The model identifies potential trade opportunities based on insider purchase clusters.
+* use the first tradable session after the filing date as the entry date
+* use the market close on that session as the default entry price unless the chosen data workflow supports a different convention consistently across both the signal stock and SPY
 
-Example filtering criteria may include:
+The same convention must be used for the benchmark comparison.
 
-* Insider purchases exceeding $100,000 in total value
-* At least two insiders purchasing shares within 30 days
-* Insider roles including officers or directors
-* Companies with market capitalizations below $5 billion
-* Stocks trading above $5 per share
-* Minimum liquidity thresholds (e.g., average daily volume above 300,000 shares)
+### Forward Return Horizons
 
-These filters aim to eliminate noise from small or symbolic insider transactions.
+Compute forward returns at:
 
----
+* 21 trading days
+* 63 trading days
+* 126 trading days
+* 252 trading days
 
-## 5.2 Entry Rules
+These correspond approximately to 1, 3, 6, and 12 months.
 
-Once a signal is identified, the strategy must determine when a trade is executed.
+### Delisting Handling
 
-The model will assume:
+If a stock delists or price history ends before a horizon completes:
 
-**Entry occurs at the next available market price following the public filing of the insider transaction.**
+* record the realized path through the last available price
+* flag the event as incomplete for that horizon
+* keep the observation visible in the dataset so survivorship limitations are explicit
 
-This constraint ensures that the backtest only uses information that was publicly available at the time.
+V1 should not silently discard these events.
 
----
+## Benchmark and Evaluation
 
-## 5.3 Exit Rules
+Use SPY as the benchmark for all horizons.
 
-Positions will be exited based on predetermined conditions.
+For each horizon, report:
 
-Typical rules may include:
+* raw forward return
+* excess return versus SPY
+* hit rate
+* mean return
+* median return
+* return distribution spread
 
-* Stop loss (e.g., −20%)
-* Profit target (e.g., +50%)
-* Maximum holding period (e.g., 12 months)
+At minimum, distribution spread should make it easy to inspect downside and upside dispersion, such as standard deviation plus selected percentile cutoffs.
 
-These parameters limit downside risk while allowing profitable trades to develop.
+## Segmented Analysis
 
----
+V1 should report both overall results and segmented results. At minimum, include:
 
-# 6. Backtesting Methodology
+* insider-count buckets
+* aggregate-purchase-value buckets
 
-The model evaluates strategy performance through historical simulation.
+If company-size data is available, also segment by company size bucket rather than using company size as an assumed filter for alpha.
 
-The backtesting process proceeds as follows:
+## Bias Controls
 
-1. Load historical insider transaction data.
-2. Identify qualifying purchase clusters based on predefined filters.
-3. Retrieve historical stock prices for each qualifying company.
-4. Simulate trade entries following the insider filing date.
-5. Track each position over time.
-6. Exit positions when stop loss, profit target, or time limit conditions occur.
-7. Record trade outcomes.
-
-Each simulated trade is stored in a transaction log containing:
-
-* ticker symbol
-* entry date
-* entry price
-* exit date
-* exit price
-* percentage return
-
----
-
-# 7. Performance Evaluation
-
-The model evaluates strategy performance using several financial metrics.
-
-These include:
-
-### Return Metrics
-
-* Annualized return
-* Average trade return
-* Median trade return
-
-### Risk Metrics
-
-* Maximum drawdown
-* Volatility
-* Sharpe ratio
-
-### Trade Statistics
-
-* Win rate
-* Average gain vs. average loss
-* Profit factor
-
-These metrics allow comparison of the insider strategy against benchmark portfolios such as market index funds.
-
----
-
-# 8. Bias and Model Validation
-
-Backtesting requires careful controls to avoid statistical errors.
-
-Important considerations include:
+The write-up and implementation should explicitly guard against the following issues.
 
 ### Look-Ahead Bias
 
-Trades must be triggered using the **filing date**, not the transaction date.
+Signals must be triggered using filing date, not transaction date.
 
 ### Survivorship Bias
 
-The dataset must include companies that no longer exist to prevent artificially optimistic results.
+The project should preserve failed or incomplete observations whenever possible and clearly note where public data sources may underrepresent delisted names.
 
-### Liquidity Constraints
+### Liquidity Bias
 
-Trades should only occur in securities with sufficient trading volume to realistically execute orders.
+Tradability filters should be enforced using data available at the event date, not with hindsight.
 
 ### Overfitting
 
-Strategy parameters should be tested across multiple time periods to ensure robustness.
+V1 should avoid parameter tuning beyond the fixed rules defined in this note. If the signal appears promising, robustness checks can be added later across different time periods and threshold values.
 
----
+## V1 Deliverables
 
-# 9. Model Implementation and Practical Use
+The first completed research pass should produce:
 
-Once validated, the model can be used operationally to generate trade signals.
+* one event dataset with one row per qualified signal
+* one results summary table for each return horizon
+* one segmented analysis table by signal-strength bucket
+* one short conclusion stating whether the signal is strong enough to justify portfolio-level backtesting
 
-The workflow would consist of:
+## Exit Criteria For V1
 
-1. Daily download of newly filed insider transactions.
-2. Automatic filtering based on strategy criteria.
-3. Generation of a list of potential trade candidates.
-4. Manual or automated execution of trades.
-5. Continuous monitoring of positions according to exit rules.
+V1 is complete when the analysis can answer all of the following:
 
-This approach transforms insider transaction data into a **systematic trading process rather than discretionary speculation**.
-
----
-
-# 10. Conclusion
-
-This project outlines a structured approach to testing whether **cluster insider purchases can serve as a predictive investment signal**.
-
-By combining insider transaction data, historical price data, and quantitative backtesting tools, it is possible to construct a model that:
-
-* identifies potential opportunities
-* evaluates historical performance
-* generates objective buy and sell signals
-
-While insider-based strategies may provide statistical advantages in certain conditions, their effectiveness must be validated through rigorous testing and careful risk management.
-
-Ultimately, the objective is not to predict individual stock movements with certainty but rather to determine whether insider purchasing patterns provide **a repeatable probabilistic edge within a diversified investment framework**.
-
+* How many qualified events exist under the fixed rules?
+* Do those events outperform SPY on average over 1, 3, 6, and 12 month horizons?
+* Is the effect concentrated in stronger signals, such as more insiders or larger aggregate purchase value?
+* Are the results robust enough to justify building a portfolio backtest next?
