@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -76,6 +77,12 @@ class PriceBar:
     adj_close: float
     volume: float
     market_cap: Optional[float]
+    shares_outstanding: Optional[float]
+    sector: str
+    industry: str
+    exchange: str
+    country: str
+    price_source: str
     has_adjusted_price: bool
 
 
@@ -330,6 +337,12 @@ def load_price_bars(path: Path) -> dict[str, list[PriceBar]]:
                     adj_close=adj_close if adj_close is not None else raw_close,
                     volume=volume,
                     market_cap=parse_float(first_present(row, "market_cap")),
+                    shares_outstanding=parse_float(first_present(row, "shares_outstanding")),
+                    sector=first_present(row, "sector"),
+                    industry=first_present(row, "industry"),
+                    exchange=first_present(row, "exchange"),
+                    country=first_present(row, "country"),
+                    price_source=first_present(row, "price_source"),
                     has_adjusted_price=adj_close is not None,
                 )
             )
@@ -668,10 +681,16 @@ def build_output_tables(
 
     for event in primary_events:
         series = aligned[event.ticker]
+        entry_bar = bars_by_ticker[event.ticker][event.entry_index]
         row = {
             "issuer_cik": event.issuer_cik,
             "ticker": event.ticker,
             "issuer_name": event.issuer_name,
+            "sector": entry_bar.sector,
+            "industry": entry_bar.industry,
+            "exchange": entry_bar.exchange,
+            "country": entry_bar.country,
+            "price_source": entry_bar.price_source,
             "event_date": event.event_date.isoformat(),
             "window_start": event.window_start.isoformat(),
             "window_end": event.window_end.isoformat(),
@@ -689,6 +708,7 @@ def build_output_tables(
             "purchase_value_bucket": purchase_value_bucket(event.total_purchase_value),
             "avg_daily_dollar_volume_20d": format_number(event.avg_daily_dollar_volume_20d),
             "market_cap": format_number(event.market_cap),
+            "shares_outstanding": format_number(entry_bar.shares_outstanding),
             "size_bucket": size_bucket(event.market_cap),
             "canonical_roles": event.canonical_roles,
             "owner_group_names": event.owner_group_names,
@@ -885,6 +905,185 @@ def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def choose_reference_horizon(row: dict[str, str], preferred_horizon: int = 63) -> Optional[int]:
+    if row.get(f"complete_{preferred_horizon}d") == "yes":
+        return preferred_horizon
+    complete_horizons = [horizon for horizon in HORIZONS if row.get(f"complete_{horizon}d") == "yes"]
+    if not complete_horizons:
+        return None
+    return max(complete_horizons)
+
+
+def event_horizon_outcome(row: dict[str, str], horizon: int) -> str:
+    if row.get(f"complete_{horizon}d") != "yes":
+        return "incomplete"
+    net_bhar = parse_float(row.get(f"net_bhar_return_{horizon}d", ""))
+    if net_bhar is None:
+        return "incomplete"
+    return "successful" if net_bhar > 0 else "unsuccessful"
+
+
+def build_parameter_matched_outcomes(
+    event_rows: list[dict[str, str]],
+    *,
+    preferred_horizon: int = 63,
+) -> tuple[list[dict[str, str]], list[dict[str, str]], dict[str, object]]:
+    outcome_rows: list[dict[str, str]] = []
+    grouped: dict[str, list[dict[str, str]]] = {}
+
+    for row in event_rows:
+        horizon_values: list[tuple[int, float]] = []
+        success_by_horizon: dict[int, str] = {}
+        horizon_issue_flags: list[str] = []
+        positive_complete_count = 0
+        complete_count = 0
+
+        for horizon in HORIZONS:
+            outcome = event_horizon_outcome(row, horizon)
+            success_by_horizon[horizon] = outcome
+            if outcome != "incomplete":
+                complete_count += 1
+                net_bhar = parse_float(row.get(f"net_bhar_return_{horizon}d", ""))
+                if net_bhar is not None:
+                    horizon_values.append((horizon, net_bhar))
+                    if net_bhar > 0:
+                        positive_complete_count += 1
+            else:
+                horizon_flag = row.get(f"horizon_flag_{horizon}d", "")
+                if horizon_flag and horizon_flag != "complete":
+                    horizon_issue_flags.append(f"{horizon}d:{horizon_flag}")
+
+        reference_horizon = choose_reference_horizon(row, preferred_horizon=preferred_horizon)
+        reference_return = (
+            parse_float(row.get(f"net_bhar_return_{reference_horizon}d", "")) if reference_horizon is not None else None
+        )
+        reference_outcome = success_by_horizon.get(reference_horizon, "incomplete") if reference_horizon is not None else "incomplete"
+
+        if complete_count == 0:
+            overall_outcome = "incomplete"
+        elif positive_complete_count == complete_count:
+            overall_outcome = "successful"
+        elif positive_complete_count == 0:
+            overall_outcome = "unsuccessful"
+        else:
+            overall_outcome = "mixed"
+
+        best_horizon, best_return = max(horizon_values, key=lambda item: item[1]) if horizon_values else (None, None)
+        worst_horizon, worst_return = min(horizon_values, key=lambda item: item[1]) if horizon_values else (None, None)
+
+        outcome_row = {
+            "event_id": f"{row['issuer_cik']}:{row['ticker']}:{row['event_date']}",
+            "met_parameters": "yes",
+            "ticker": row["ticker"],
+            "issuer_name": row["issuer_name"],
+            "issuer_cik": row["issuer_cik"],
+            "sector": row.get("sector", ""),
+            "industry": row.get("industry", ""),
+            "exchange": row.get("exchange", ""),
+            "country": row.get("country", ""),
+            "price_source": row.get("price_source", ""),
+            "event_date": row["event_date"],
+            "entry_date": row["entry_date"],
+            "entry_timing": row["entry_timing"],
+            "distinct_insiders": row["distinct_insiders"],
+            "canonical_roles": row["canonical_roles"],
+            "total_purchase_value": row["total_purchase_value"],
+            "avg_daily_dollar_volume_20d": row["avg_daily_dollar_volume_20d"],
+            "market_cap": row["market_cap"],
+            "shares_outstanding": row.get("shares_outstanding", ""),
+            "investable_under_capacity": row["investable_under_capacity"],
+            "liquidity_bucket": row["liquidity_bucket"],
+            "size_bucket": row["size_bucket"],
+            "microcap_bucket": row["microcap_bucket"],
+            "reference_horizon_days": str(reference_horizon or ""),
+            "reference_net_bhar_return": format_number(reference_return),
+            "reference_outcome": reference_outcome,
+            "overall_outcome": overall_outcome,
+            "complete_horizon_count": str(complete_count),
+            "successful_complete_horizon_count": str(positive_complete_count),
+            "success_rate_complete_horizons": format_number(
+                (positive_complete_count / complete_count) if complete_count else None
+            ),
+            "best_horizon_days": str(best_horizon or ""),
+            "best_net_bhar_return": format_number(best_return),
+            "worst_horizon_days": str(worst_horizon or ""),
+            "worst_net_bhar_return": format_number(worst_return),
+            "success_21d": success_by_horizon[21],
+            "success_63d": success_by_horizon[63],
+            "success_126d": success_by_horizon[126],
+            "success_252d": success_by_horizon[252],
+            "net_bhar_return_21d": row["net_bhar_return_21d"],
+            "net_bhar_return_63d": row["net_bhar_return_63d"],
+            "net_bhar_return_126d": row["net_bhar_return_126d"],
+            "net_bhar_return_252d": row["net_bhar_return_252d"],
+            "data_quality_flags": row["data_quality_flags"],
+            "timing_ambiguous": row["timing_ambiguous"],
+            "horizon_issue_flags": "; ".join(horizon_issue_flags),
+        }
+        outcome_rows.append(outcome_row)
+        grouped.setdefault(row["ticker"], []).append(outcome_row)
+
+    ticker_summary_rows: list[dict[str, str]] = []
+    for ticker, rows in sorted(grouped.items()):
+        reference_returns = [
+            parse_float(row["reference_net_bhar_return"]) for row in rows if parse_float(row["reference_net_bhar_return"]) is not None
+        ]
+        first = rows[0]
+        success_count = sum(1 for row in rows if row["reference_outcome"] == "successful")
+        failure_count = sum(1 for row in rows if row["reference_outcome"] == "unsuccessful")
+        mixed_count = sum(1 for row in rows if row["overall_outcome"] == "mixed")
+        incomplete_count = sum(1 for row in rows if row["overall_outcome"] == "incomplete")
+        investable_count = sum(1 for row in rows if row["investable_under_capacity"] == "yes")
+        complete_reference_count = success_count + failure_count
+        success_rate = (success_count / complete_reference_count) if complete_reference_count else None
+
+        ticker_summary_rows.append(
+            {
+                "ticker": ticker,
+                "issuer_name": first["issuer_name"],
+                "issuer_cik": first["issuer_cik"],
+                "sector": first["sector"],
+                "industry": first["industry"],
+                "event_count": str(len(rows)),
+                "investable_event_count": str(investable_count),
+                "successful_reference_event_count": str(success_count),
+                "unsuccessful_reference_event_count": str(failure_count),
+                "mixed_event_count": str(mixed_count),
+                "incomplete_event_count": str(incomplete_count),
+                "reference_success_rate": format_number(success_rate),
+                "mean_reference_net_bhar_return": format_number(
+                    summarize_numeric(reference_returns)["mean"] if reference_returns else None
+                ),
+                "first_event_date": min(row["event_date"] for row in rows),
+                "last_event_date": max(row["event_date"] for row in rows),
+            }
+        )
+
+    sorted_by_reference = sorted(
+        (row for row in outcome_rows if parse_float(row["reference_net_bhar_return"]) is not None),
+        key=lambda row: float(row["reference_net_bhar_return"]),
+    )
+    research_summary = {
+        "preferred_reference_horizon": preferred_horizon,
+        "parameter_matched_event_count": len(outcome_rows),
+        "ticker_count": len(ticker_summary_rows),
+        "successful_reference_event_count": sum(1 for row in outcome_rows if row["reference_outcome"] == "successful"),
+        "unsuccessful_reference_event_count": sum(1 for row in outcome_rows if row["reference_outcome"] == "unsuccessful"),
+        "mixed_or_incomplete_event_count": sum(
+            1 for row in outcome_rows if row["reference_outcome"] == "incomplete" or row["overall_outcome"] == "mixed"
+        ),
+        "top_reference_winners": sorted_by_reference[-5:][::-1],
+        "top_reference_losers": sorted_by_reference[:5],
+    }
+
+    return outcome_rows, ticker_summary_rows, research_summary
+
+
 def build_warnings(
     *,
     coverage: dict[str, object],
@@ -991,8 +1190,11 @@ def build_markdown_summary(
             "",
             "* `signal_candidates.csv`: raw cluster candidates with overlap, timing, and qualification flags",
             "* `qualified_events.csv`: de-overlapped primary events with gross/net BHAR, investability, and horizon-status fields",
+            "* `parameter_matched_outcomes.csv`: clean event-level ledger showing which parameter-matched stocks succeeded or failed by horizon",
+            "* `ticker_outcome_summary.csv`: ticker-level aggregation of the parameter-matched event outcomes",
             "* `results_summary.csv`: aggregate gross/net BHAR metrics and inference diagnostics by horizon and sample",
             "* `segmented_analysis.csv`: grouped gross/net BHAR metrics by cluster-strength and investability buckets",
+            "* `research_summary.json`: machine-readable summary of counts, warnings, and top winners/losers",
         ]
     )
     output_dir.joinpath("summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1149,12 +1351,23 @@ def run_study(
         "max_adv_participation_pct": max_adv_participation * 100.0,
         "note": "Net returns are event-level realism adjustments, not a portfolio simulation.",
     }
+    parameter_outcome_rows, ticker_summary_rows, research_summary = build_parameter_matched_outcomes(event_rows)
+    research_summary_payload = {
+        "benchmark": benchmark_ticker,
+        "warnings": warnings,
+        "coverage": coverage,
+        "methodology": methodology,
+        "parameter_outcome_summary": research_summary,
+    }
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_csv(output_dir / "signal_candidates.csv", candidate_rows)
     write_csv(output_dir / "qualified_events.csv", event_rows)
+    write_csv(output_dir / "parameter_matched_outcomes.csv", parameter_outcome_rows)
+    write_csv(output_dir / "ticker_outcome_summary.csv", ticker_summary_rows)
     write_csv(output_dir / "results_summary.csv", summary_rows)
     write_csv(output_dir / "segmented_analysis.csv", segment_rows)
+    write_json(output_dir / "research_summary.json", research_summary_payload)
     build_markdown_summary(
         output_dir=output_dir,
         benchmark_ticker=benchmark_ticker,
@@ -1171,6 +1384,9 @@ def run_study(
         "raw_qualified_events": raw_qualified,
         "primary_qualified_events": primary_qualified,
         "event_rows": event_rows,
+        "parameter_outcome_rows": parameter_outcome_rows,
+        "ticker_summary_rows": ticker_summary_rows,
+        "research_summary": research_summary_payload,
         "summary_rows": summary_rows,
         "segment_rows": segment_rows,
         "candidate_count": len(candidate_rows),

@@ -37,6 +37,14 @@ def top_events(event_rows: list[dict[str, str]], horizon: int = 63, limit: int =
     return filtered[:limit]
 
 
+def bottom_events(event_rows: list[dict[str, str]], horizon: int = 63, limit: int = 25) -> list[dict[str, str]]:
+    key = f"net_bhar_return_{horizon}d"
+    complete_key = f"complete_{horizon}d"
+    filtered = [row for row in event_rows if row.get(complete_key) == "yes" and row.get(key)]
+    filtered.sort(key=lambda row: float(row[key]))
+    return filtered[:limit]
+
+
 def build_response(
     *,
     run_dir: Path,
@@ -53,8 +61,11 @@ def build_response(
             "prices_csv": f"/runs/{run_dir.name}/data/daily_prices.csv",
             "signal_candidates": f"/runs/{run_dir.name}/analysis/signal_candidates.csv",
             "qualified_events": f"/runs/{run_dir.name}/analysis/qualified_events.csv",
+            "parameter_matched_outcomes": f"/runs/{run_dir.name}/analysis/parameter_matched_outcomes.csv",
+            "ticker_outcome_summary": f"/runs/{run_dir.name}/analysis/ticker_outcome_summary.csv",
             "results_summary": f"/runs/{run_dir.name}/analysis/results_summary.csv",
             "segmented_analysis": f"/runs/{run_dir.name}/analysis/segmented_analysis.csv",
+            "research_summary_json": f"/runs/{run_dir.name}/analysis/research_summary.json",
             "summary_md": f"/runs/{run_dir.name}/analysis/summary.md",
         },
         "download": {
@@ -70,6 +81,17 @@ def build_response(
             "missing_price_tickers": price_result["missing_tickers"],
             "adjusted_price_row_count": price_result["adjusted_price_row_count"],
             "market_cap_row_count": price_result["market_cap_row_count"],
+            "price_input_mode": price_result.get("input_mode", "public_download"),
+            "price_input_csv": price_result.get("input_csv", ""),
+            "benchmark_supplemented": price_result.get("benchmark_supplemented", "no"),
+            "price_vendor_profile": price_result.get("price_vendor_profile", ""),
+            "price_vendor_description": price_result.get("price_vendor_description", ""),
+            "price_mapping_json": price_result.get("price_mapping_json", ""),
+            "skipped_row_count": price_result.get("skipped_row_count", 0),
+            "duplicate_row_count": price_result.get("duplicate_row_count", 0),
+            "derived_market_cap_row_count": price_result.get("derived_market_cap_row_count", 0),
+            "derived_adjusted_ohlc_row_count": price_result.get("derived_adjusted_ohlc_row_count", 0),
+            "field_coverage_pct": price_result.get("field_coverage_pct", {}),
             "failed_filing_paths": insider_result["failed_filing_paths"],
             "cache_dir": insider_result["cache_dir"],
         },
@@ -82,7 +104,12 @@ def build_response(
             "benchmark": study_result["benchmark"],
             "summary_rows": study_result["summary_rows"],
             "segment_rows": study_result["segment_rows"],
+            "event_rows": study_result["event_rows"],
+            "parameter_outcome_rows": study_result["parameter_outcome_rows"],
+            "ticker_summary_rows": study_result["ticker_summary_rows"],
+            "research_summary": study_result["research_summary"],
             "top_events_63d": top_events(study_result["event_rows"], 63),
+            "bottom_events_63d": bottom_events(study_result["event_rows"], 63),
         },
         "warnings": study_result["warnings"],
         "coverage": study_result["coverage"],
@@ -173,6 +200,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         ticker_filter = data_pipeline.parse_ticker_filter(str(payload.get("tickers", "")))
         benchmark = str(payload.get("benchmark", "SPY")).strip() or "SPY"
         max_filings = int(payload.get("max_filings", 250) or 250)
+        external_prices_csv = str(payload.get("external_prices_csv", "")).strip()
+        external_prices_vendor_profile = str(payload.get("external_prices_vendor_profile", "generic") or "generic").strip()
+        external_prices_mapping_json = str(payload.get("external_prices_mapping_json", "")).strip()
 
         insider_result = data_pipeline.download_form4_transactions(
             start_date=start_date,
@@ -182,13 +212,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
             ticker_filter=ticker_filter,
             max_filings=max_filings,
         )
-        price_result = data_pipeline.download_price_history(
-            tickers=set(insider_result["unique_tickers"]),
-            benchmark_ticker=benchmark,
-            start_date=start_date,
-            end_date=end_date,
-            output_csv=data_dir / "daily_prices.csv",
-        )
+        if external_prices_csv:
+            price_result = data_pipeline.normalize_external_price_history(
+                input_csv=Path(external_prices_csv).expanduser(),
+                benchmark_ticker=benchmark,
+                start_date=start_date,
+                end_date=end_date,
+                output_csv=data_dir / "daily_prices.csv",
+                vendor_profile=external_prices_vendor_profile,
+                mapping_json=Path(external_prices_mapping_json).expanduser() if external_prices_mapping_json else None,
+            )
+        else:
+            price_result = data_pipeline.download_price_history(
+                tickers=set(insider_result["unique_tickers"]),
+                benchmark_ticker=benchmark,
+                start_date=start_date,
+                end_date=end_date,
+                output_csv=data_dir / "daily_prices.csv",
+            )
         study_result = insider_event_study.run_study(
             insider_csv=data_dir / "insider_transactions.csv",
             prices_csv=data_dir / "daily_prices.csv",

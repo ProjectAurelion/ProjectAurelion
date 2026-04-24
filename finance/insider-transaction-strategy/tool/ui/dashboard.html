@@ -6,414 +6,1390 @@
   <title>Insider Event Study Dashboard</title>
   <style>
     :root {
-      --bg: #f4efe7;
-      --panel: #fffdf9;
-      --ink: #182127;
-      --muted: #5c6770;
-      --accent: #0f766e;
-      --accent-soft: #d8f0ec;
-      --border: #d8d0c4;
-      --danger: #8b1e3f;
+      --bg: #050505;
+      --bg-soft: #0b0d10;
+      --panel: rgba(12, 15, 20, 0.9);
+      --panel-strong: rgba(16, 20, 26, 0.96);
+      --panel-soft: rgba(255, 255, 255, 0.03);
+      --border: rgba(255, 255, 255, 0.09);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --ink: #f3f5f7;
+      --muted: #96a0aa;
+      --accent: #ffffff;
+      --accent-strong: #ffffff;
+      --accent-soft: rgba(255, 255, 255, 0.08);
+      --warning-bg: rgba(255, 255, 255, 0.03);
+      --warning-border: rgba(255, 255, 255, 0.11);
+      --danger-bg: rgba(255, 255, 255, 0.04);
+      --danger-border: rgba(255, 255, 255, 0.14);
+      --good: #19c37d;
+      --bad: #f59e0b;
+      --shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+      --radius: 24px;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
-      font-family: Georgia, "Iowan Old Style", serif;
+      min-height: 100vh;
+      font-family: "Sohne", "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, #f9f4ec 0, transparent 30%),
-        linear-gradient(180deg, #efe7da 0%, var(--bg) 40%, #f8f5ef 100%);
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 28%),
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.03), transparent 24%),
+        linear-gradient(180deg, #020202 0%, #07090c 48%, #050505 100%);
     }
+
+    code {
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 0.12rem 0.3rem;
+      border-radius: 8px;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
     .shell {
-      max-width: 1280px;
+      max-width: 1360px;
       margin: 0 auto;
-      padding: 32px 20px 48px;
+      padding: 28px 20px 56px;
     }
-    .hero {
+
+    .topbar {
       display: grid;
-      gap: 12px;
+      gap: 18px;
       margin-bottom: 24px;
     }
-    h1 {
+
+    .hero-copy {
+      display: grid;
+      gap: 10px;
+      max-width: 880px;
+    }
+
+    .eyebrow {
+      color: var(--accent-strong);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
       margin: 0;
-      font-size: clamp(2rem, 4vw, 3.4rem);
-      line-height: 0.95;
       letter-spacing: -0.03em;
     }
+
+    h1 {
+      font-size: clamp(2.4rem, 5vw, 4.6rem);
+      line-height: 0.94;
+      max-width: 820px;
+    }
+
     .lede {
-      max-width: 800px;
-      font-size: 1.05rem;
+      margin: 0;
       color: var(--muted);
+      font-size: 1.03rem;
+      line-height: 1.65;
+      max-width: 760px;
     }
-    .layout {
+
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+      padding: 16px 18px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .tab-switch {
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+    }
+
+    .tab-button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 10px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+      font-weight: 600;
+    }
+
+    .tab-button:hover {
+      color: var(--ink);
+      transform: translateY(-1px);
+    }
+
+    .tab-button.active {
+      background: rgba(255, 255, 255, 0.92);
+      color: #050505;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.92);
+    }
+
+    .top-note {
+      color: var(--muted);
+      font-size: 0.92rem;
+      max-width: 620px;
+      line-height: 1.5;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .input-layout {
       display: grid;
-      grid-template-columns: minmax(320px, 420px) 1fr;
-      gap: 20px;
+      gap: 18px;
+      grid-template-columns: minmax(0, 820px) minmax(280px, 360px);
+      align-items: start;
     }
+
     .panel {
-      background: rgba(255, 253, 249, 0.92);
+      background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: 0 24px 60px rgba(64, 52, 39, 0.08);
-      padding: 18px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
     }
-    h2, h3 {
-      margin-top: 0;
-      margin-bottom: 10px;
+
+    .panel-head {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 22px;
     }
+
+    .panel-head p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .form-panel {
+      padding: 26px;
+    }
+
     .form-grid {
       display: grid;
-      gap: 12px;
+      gap: 14px;
     }
-    .row-2 {
+
+    .group-card {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .group-head {
+      display: grid;
+      gap: 5px;
+    }
+
+    .group-head p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.9rem;
+    }
+
+    .section-label {
+      margin-top: 6px;
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      font-size: 1rem;
+    }
+
+    .field-row {
       display: grid;
       gap: 12px;
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
     label {
       display: grid;
-      gap: 6px;
-      font-size: 0.92rem;
+      gap: 7px;
       color: var(--muted);
+      font-size: 0.9rem;
     }
-    input, textarea, button, select {
-      font: inherit;
-    }
-    input, textarea, select {
+
+    input,
+    textarea,
+    select {
       width: 100%;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: #fff;
-      padding: 10px 12px;
       color: var(--ink);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 16px;
+      padding: 12px 14px;
+      outline: none;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
     }
-    textarea {
-      min-height: 88px;
-      resize: vertical;
-    }
-    button {
-      border: 0;
-      border-radius: 999px;
-      padding: 12px 18px;
-      background: var(--accent);
-      color: white;
-      cursor: pointer;
-      transition: transform 160ms ease, box-shadow 160ms ease;
-      box-shadow: 0 14px 30px rgba(15, 118, 110, 0.22);
-    }
-    button:hover {
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.05);
       transform: translateY(-1px);
     }
+
+    textarea {
+      min-height: 94px;
+      resize: vertical;
+    }
+
     .hint {
+      margin: -2px 0 2px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
+
+    .run-button {
+      border: 0;
+      border-radius: 18px;
+      padding: 14px 18px;
+      color: #050505;
+      background: linear-gradient(135deg, #ffffff, #d9d9d9);
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      box-shadow: 0 18px 36px rgba(255, 255, 255, 0.08);
+      transition: transform 160ms ease, filter 160ms ease;
+    }
+
+    .run-button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+    }
+
+    .run-button:disabled {
+      opacity: 0.7;
+      cursor: wait;
+      transform: none;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .info-panel {
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .info-panel p {
       margin: 0;
       color: var(--muted);
-      font-size: 0.88rem;
+      line-height: 1.55;
     }
+
+    .info-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      display: grid;
+      gap: 8px;
+      line-height: 1.5;
+    }
+
     .status {
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: var(--accent-soft);
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       color: var(--ink);
-      min-height: 48px;
+      line-height: 1.45;
+      min-height: 80px;
       white-space: pre-wrap;
     }
+
     .status.error {
-      background: #f8dde3;
-      color: var(--danger);
+      background: var(--danger-bg);
+      border-color: var(--danger-border);
     }
+
+    .results-empty {
+      padding: 34px;
+      display: grid;
+      gap: 12px;
+      min-height: 280px;
+      place-content: center;
+    }
+
+    .results-empty p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 620px;
+      line-height: 1.6;
+    }
+
+    .results-shell {
+      display: grid;
+      gap: 18px;
+    }
+
+    .results-nav-panel {
+      padding: 16px 20px;
+    }
+
+    .results-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .nav-chip {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--ink);
+      padding: 9px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 0.84rem;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+    }
+
+    .nav-chip:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+
+    .hero-panel,
+    .section-panel {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .decision-strip {
+      display: grid;
+      gap: 16px;
+      padding: 18px;
+      border-radius: 22px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+        rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .decision-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .decision-copy {
+      display: grid;
+      gap: 6px;
+      max-width: 720px;
+    }
+
+    .decision-copy p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .decision-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .decision-badge.good {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .decision-badge.warn {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .decision-badge.bad {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .snapshot-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .snapshot-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--ink);
+      font-size: 0.84rem;
+    }
+
+    .section-head {
+      display: grid;
+      gap: 6px;
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 12px;
-      margin-bottom: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
+
     .card {
-      padding: 14px;
-      border-radius: 14px;
-      background: #fff;
-      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
+
     .card .label {
       color: var(--muted);
-      font-size: 0.86rem;
-      margin-bottom: 6px;
+      font-size: 0.82rem;
+      margin-bottom: 8px;
     }
+
     .card .value {
       font-size: 1.4rem;
       font-weight: 700;
+      letter-spacing: -0.03em;
     }
-    .section {
-      margin-bottom: 20px;
+
+    .card .subvalue {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
     }
+
+    .quick-read {
+      display: grid;
+      gap: 16px;
+      padding: 22px;
+      border-radius: 22px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+        rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .quick-read h3 {
+      font-size: 1.35rem;
+      line-height: 1.1;
+    }
+
+    .quick-read p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+      font-size: 0.84rem;
+    }
+
+    .results-grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .legend i {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .legend .good {
+      background: var(--good);
+    }
+
+    .legend .bad {
+      background: var(--bad);
+    }
+
+    .chart-card {
+      padding: 18px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .chart-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .chart-row {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 72px 1fr 170px;
+      align-items: center;
+    }
+
+    .chart-label {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .chart-track {
+      position: relative;
+      height: 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+    }
+
+    .chart-track::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 50%;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .chart-bar {
+      position: absolute;
+      top: 1px;
+      bottom: 1px;
+      border-radius: 999px;
+    }
+
+    .chart-bar.positive {
+      left: 50%;
+      background: linear-gradient(90deg, rgba(25, 195, 125, 0.78), rgba(25, 195, 125, 1));
+    }
+
+    .chart-bar.negative {
+      right: 50%;
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.82), rgba(217, 119, 6, 1));
+    }
+
+    .chart-meta {
+      display: grid;
+      gap: 2px;
+      justify-items: end;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    .distribution {
+      display: grid;
+      gap: 10px;
+    }
+
+    .distribution-axis {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .distribution-row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 84px 1fr 88px;
+      align-items: center;
+    }
+
+    .distribution-name {
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .distribution-track {
+      position: relative;
+      height: 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .distribution-track::after {
+      content: "";
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      left: 50%;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .distribution-dot {
+      position: absolute;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 3px rgba(5, 5, 5, 0.86);
+    }
+
+    .distribution-dot.positive {
+      background: var(--good);
+    }
+
+    .distribution-dot.negative {
+      background: var(--bad);
+    }
+
+    .distribution-value {
+      text-align: right;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .score-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    }
+
+    .score-card {
+      padding: 16px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .score-card h4 {
+      margin-bottom: 8px;
+      font-size: 0.94rem;
+      color: var(--muted);
+    }
+
+    .score-value {
+      font-size: 1.42rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .score-detail {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.02);
+      max-height: 380px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.92rem;
-      background: #fff;
-      border-radius: 12px;
-      overflow: hidden;
+      font-size: 0.9rem;
     }
-    th, td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #ece4d9;
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       text-align: left;
       vertical-align: top;
     }
+
     th {
-      background: #f6f1e8;
-      color: #32404c;
       position: sticky;
       top: 0;
+      z-index: 1;
+      background: rgba(16, 20, 26, 0.97);
+      color: var(--ink);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
-    .table-wrap {
-      overflow: auto;
-      max-height: 360px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.025);
     }
+
+    .callouts {
+      display: grid;
+      gap: 10px;
+    }
+
+    .callout {
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    .callout.warn {
+      background: var(--warning-bg);
+      border-color: var(--warning-border);
+    }
+
+    .warning-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .warning-card {
+      display: grid;
+      gap: 12px;
+      padding: 16px 18px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .warning-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .warning-label {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .warning-body {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .warning-body strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .meta-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      display: grid;
+      gap: 8px;
+      line-height: 1.55;
+    }
+
     .files {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
     }
+
     .files a {
-      display: inline-block;
-      padding: 8px 12px;
+      display: inline-flex;
+      align-items: center;
+      padding: 9px 13px;
       border-radius: 999px;
       text-decoration: none;
-      color: var(--accent);
-      border: 1px solid rgba(15, 118, 110, 0.25);
-      background: rgba(15, 118, 110, 0.06);
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: transform 160ms ease, background 160ms ease;
     }
-    .callouts {
-      display: grid;
-      gap: 10px;
+
+    .files a:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.08);
     }
-    .callout {
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: #fff;
+
+    details {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.02);
+      overflow: hidden;
     }
-    .callout.warn {
-      border-color: rgba(139, 30, 63, 0.2);
-      background: #fdf1f4;
+
+    summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.03);
     }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
+
+    details > div {
+      padding: 14px;
     }
-    .meta-list {
-      margin: 0;
-      padding-left: 18px;
-      color: var(--muted);
-    }
+
     pre {
       margin: 0;
-      padding: 14px;
-      border-radius: 14px;
-      background: #171e23;
-      color: #e7f1f0;
+      padding: 16px;
+      border-radius: 18px;
+      background: #05070a;
+      color: #d9e2ea;
       overflow: auto;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      border: 1px solid rgba(255, 255, 255, 0.07);
     }
-    @media (max-width: 960px) {
-      .layout {
+
+    .empty-state {
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.02);
+      line-height: 1.55;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    @media (max-width: 1120px) {
+      .input-layout,
+      .results-grid {
         grid-template-columns: 1fr;
       }
-      .row-2 {
+    }
+
+    @media (max-width: 760px) {
+      .field-row,
+      .cards {
         grid-template-columns: 1fr;
+      }
+
+      .top-actions {
+        align-items: stretch;
+      }
+
+      .tab-switch {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .tab-button {
+        flex: 1;
+      }
+
+      .chart-row,
+      .distribution-row {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-meta,
+      .distribution-value {
+        text-align: left;
+        justify-items: start;
       }
     }
   </style>
 </head>
 <body>
   <div class="shell">
-    <section class="hero">
-      <h1>Insider Form 4 Event Study</h1>
-      <p class="lede">Fetch official SEC Form 4 filings, pull daily price history, vary your signal rules, and review whether clustered insider buying outperformed <code>SPY</code> across the horizons that matter to you.</p>
+    <header class="topbar">
+      <div class="hero-copy">
+        <div class="eyebrow">Insider Cluster Lab</div>
+        <h1>Insider Form 4 Event Study</h1>
+        <p class="lede">Test whether clustered insider buying actually beat <code>SPY</code> after simple trading frictions. The goal of this dashboard is simple: help you judge whether the pattern looks promising, fragile, or not worth pursuing.</p>
+      </div>
+
+      <div class="top-actions">
+        <div class="tab-switch">
+          <button class="tab-button active" data-tab="inputs" type="button">Inputs</button>
+          <button class="tab-button" data-tab="results" type="button">Results</button>
+        </div>
+        <div class="top-note">Use the Inputs tab to define the experiment. Once a run finishes, the Results tab becomes the cleaner decision screen.</div>
+      </div>
+    </header>
+
+    <section class="tab-panel active" id="tab-inputs">
+      <div class="input-layout">
+        <div class="panel form-panel">
+          <div class="panel-head">
+            <div class="eyebrow">Configure</div>
+            <h2>Study Parameters</h2>
+            <p>Start with a small date range, confirm the signal reads clearly, then widen the sample. This keeps the workflow fast and easier to sanity-check.</p>
+          </div>
+
+          <div class="form-grid">
+            <div class="group-card">
+              <div class="group-head">
+                <div class="eyebrow">Basics</div>
+                <h3>Run Setup</h3>
+                <p>The date range, identity, and universe definition for the study.</p>
+              </div>
+
+              <label>
+                Run name
+                <input id="run_name" value="form4-v1">
+              </label>
+
+              <label>
+                SEC User-Agent
+                <input id="user_agent" placeholder="Alex Christensen alex@example.com">
+              </label>
+
+              <p class="hint">The SEC asks for a real identifying User-Agent with your name and email.</p>
+
+              <div class="field-row">
+                <label>
+                  Start date
+                  <input id="start_date" type="date" value="2024-01-01">
+                </label>
+                <label>
+                  End date
+                  <input id="end_date" type="date" value="2024-03-31">
+                </label>
+              </div>
+
+              <label>
+                Optional ticker filter
+                <textarea id="tickers" placeholder="AAPL, MSFT, NVDA"></textarea>
+              </label>
+
+              <div class="field-row">
+                <label>
+                  Max SEC filings
+                  <input id="max_filings" type="number" value="250" min="1">
+                </label>
+                <label>
+                  Benchmark
+                  <input id="benchmark" value="SPY">
+                </label>
+              </div>
+
+              <label>
+                Optional external prices CSV path
+                <input id="external_prices_csv" placeholder="/path/to/vendor_prices.csv">
+              </label>
+
+              <div class="field-row">
+                <label>
+                  External prices profile
+                  <select id="external_prices_vendor_profile">
+                    <option value="generic" selected>generic</option>
+                    <option value="normalized">normalized</option>
+                    <option value="institutional">institutional</option>
+                  </select>
+                </label>
+                <label>
+                  Optional mapping JSON path
+                  <input id="external_prices_mapping_json" placeholder="/path/to/vendor_mapping.json">
+                </label>
+              </div>
+
+              <p class="hint">If provided, the study will use this richer local price/reference file instead of the public price downloader. The profile selects a preset column adapter, and the optional mapping JSON lets you override column names/constants for your specific vendor export.</p>
+            </div>
+
+            <div class="group-card">
+              <div class="group-head">
+                <div class="eyebrow">Signal Logic</div>
+                <h3>Cluster Rules</h3>
+                <p>These settings define what counts as a valid insider-buy cluster and what names remain tradable enough to study.</p>
+              </div>
+
+              <div class="field-row">
+                <label>
+                  Window days
+                  <input id="window_days" type="number" value="30" min="1">
+                </label>
+                <label>
+                  Cooldown days
+                  <input id="cooldown_days" type="number" value="90" min="1">
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label>
+                  Min distinct insiders
+                  <input id="min_distinct_insiders" type="number" value="2" min="1">
+                </label>
+                <label>
+                  Min total value
+                  <input id="min_total_value" type="number" value="100000" step="1000" min="0">
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label>
+                  Min price
+                  <input id="min_price" type="number" value="5" step="0.01" min="0">
+                </label>
+                <label>
+                  Min avg daily $ volume
+                  <input id="min_daily_dollar_volume" type="number" value="1000000" step="10000" min="0">
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label>
+                  Volume lookback days
+                  <input id="lookback_days" type="number" value="20" min="1">
+                </label>
+                <label>
+                  Min market cap
+                  <input id="min_market_cap" type="number" value="100000000" step="1000000" min="0">
+                </label>
+              </div>
+
+              <label>
+                Entry timing
+                <select id="entry_timing">
+                  <option value="next_session_close" selected>next_session_close</option>
+                  <option value="next_session_open">next_session_open</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="group-card">
+              <div class="group-head">
+                <div class="eyebrow">Execution</div>
+                <h3>Trading Realism</h3>
+                <p>These assumptions do not create a portfolio simulation, but they do make the event outcomes more realistic.</p>
+              </div>
+
+              <div class="field-row">
+                <label>
+                  Commission bps / side
+                  <input id="commission_bps_per_side" type="number" value="0" step="0.1" min="0">
+                </label>
+                <label>
+                  Slippage bps / side
+                  <input id="slippage_bps_per_side" type="number" value="15" step="0.1" min="0">
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label>
+                  Assumed position size
+                  <input id="assumed_position_size" type="number" value="50000" step="1000" min="0">
+                </label>
+                <label>
+                  Max ADV participation
+                  <input id="max_adv_participation" type="number" value="0.05" step="0.01" min="0" max="1">
+                </label>
+              </div>
+
+              <label>
+                Microcap cutoff
+                <input id="microcap_cutoff" type="number" value="300000000" step="1000000" min="0">
+              </label>
+            </div>
+
+            <button id="run_button" class="run-button" type="button">Run Study</button>
+          </div>
+        </div>
+
+        <div class="side-stack">
+          <div class="panel info-panel">
+            <div class="eyebrow">Recommended</div>
+            <h3>Good First Run</h3>
+            <p>Use a small sample first so you can verify the pipeline and read the results without waiting forever.</p>
+            <ul class="info-list">
+              <li><strong>Date range:</strong> 2024-01-01 to 2024-02-29</li>
+              <li><strong>Max filings:</strong> 500</li>
+              <li><strong>Ticker filter:</strong> leave blank</li>
+              <li><strong>Focus read:</strong> 63d and 126d after costs</li>
+            </ul>
+          </div>
+
+          <div class="panel info-panel">
+            <div class="eyebrow">What You’ll See</div>
+            <h3>Results In Plain English</h3>
+            <p>The Results tab summarizes the run into a short verdict, horizon comparisons, winners and losers, and key caveats. Raw analyst-style tables stay tucked away at the bottom.</p>
+          </div>
+
+          <div class="panel info-panel">
+            <div class="eyebrow">Run Status</div>
+            <h3>Current State</h3>
+            <div id="status" class="status">Ready. Configure the study, then click Run Study.</div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <div class="layout">
-      <aside class="panel">
-        <h2>Study Controls</h2>
-        <div class="form-grid">
-          <label>
-            Run name
-            <input id="run_name" value="form4-v1">
-          </label>
+    <section class="tab-panel" id="tab-results">
+      <div id="results_empty" class="panel results-empty">
+        <div class="eyebrow">No Results Yet</div>
+        <h2>Run a study from the Inputs tab.</h2>
+        <p>Once the study finishes, this page will turn into the cleaner readout: quick verdict, comparison charts, examples of the stocks that worked and failed, plus the underlying caveats.</p>
+      </div>
 
-          <label>
-            SEC User-Agent
-            <input id="user_agent" placeholder="Alex Christensen alex@example.com">
-          </label>
-
-          <p class="hint">SEC requests a real identifying User-Agent. This should include your name and email.</p>
-
-          <div class="row-2">
-            <label>
-              Start date
-              <input id="start_date" type="date" value="2024-01-01">
-            </label>
-            <label>
-              End date
-              <input id="end_date" type="date" value="2024-03-31">
-            </label>
+      <div id="results_content" class="results-shell" hidden>
+        <section class="panel hero-panel" id="section-overview">
+          <div class="section-head">
+            <div class="eyebrow">Results</div>
+            <h2>Quick Read</h2>
+            <p>Start here. This is the fast answer to whether the current rule set looks promising or still too shaky to trust.</p>
           </div>
-
-          <label>
-            Optional ticker filter
-            <textarea id="tickers" placeholder="AAPL, MSFT, NVDA"></textarea>
-          </label>
-
-          <div class="row-2">
-            <label>
-              Max SEC filings
-              <input id="max_filings" type="number" value="250" min="1">
-            </label>
-            <label>
-              Benchmark
-              <input id="benchmark" value="SPY">
-            </label>
-          </div>
-
-          <h3>Signal Rules</h3>
-          <div class="row-2">
-            <label>
-              Window days
-              <input id="window_days" type="number" value="30" min="1">
-            </label>
-            <label>
-              Cooldown days
-              <input id="cooldown_days" type="number" value="90" min="1">
-            </label>
-          </div>
-
-          <div class="row-2">
-            <label>
-              Min distinct insiders
-              <input id="min_distinct_insiders" type="number" value="2" min="1">
-            </label>
-            <label>
-              Min total value
-              <input id="min_total_value" type="number" value="100000" step="1000" min="0">
-            </label>
-          </div>
-
-          <div class="row-2">
-            <label>
-              Min price
-              <input id="min_price" type="number" value="5" step="0.01" min="0">
-            </label>
-            <label>
-              Min avg daily $ volume
-              <input id="min_daily_dollar_volume" type="number" value="1000000" step="10000" min="0">
-            </label>
-          </div>
-
-          <div class="row-2">
-            <label>
-              Volume lookback days
-              <input id="lookback_days" type="number" value="20" min="1">
-            </label>
-            <label>
-              Min market cap
-              <input id="min_market_cap" type="number" value="100000000" step="1000000" min="0">
-            </label>
-          </div>
-
-          <label>
-            Entry timing
-            <select id="entry_timing">
-              <option value="next_session_close" selected>next_session_close</option>
-              <option value="next_session_open">next_session_open</option>
-            </select>
-          </label>
-
-          <h3>Execution Assumptions</h3>
-          <div class="row-2">
-            <label>
-              Commission bps/side
-              <input id="commission_bps_per_side" type="number" value="0" step="0.1" min="0">
-            </label>
-            <label>
-              Slippage bps/side
-              <input id="slippage_bps_per_side" type="number" value="10" step="0.1" min="0">
-            </label>
-          </div>
-
-          <div class="row-2">
-            <label>
-              Assumed position size
-              <input id="assumed_position_size" type="number" value="50000" step="1000" min="0">
-            </label>
-            <label>
-              Max ADV participation
-              <input id="max_adv_participation" type="number" value="0.10" step="0.01" min="0" max="1">
-            </label>
-          </div>
-
-          <label>
-            Microcap cutoff
-            <input id="microcap_cutoff" type="number" value="300000000" step="1000000" min="0">
-          </label>
-
-          <button id="run_button">Fetch Data And Run Study</button>
-          <div id="status" class="status">Ready.</div>
-        </div>
-      </aside>
-
-      <main class="panel">
-        <div class="section">
-          <h2>Results</h2>
+          <div id="decision_strip" class="decision-strip"></div>
+          <div id="run_snapshot" class="snapshot-row"></div>
           <div id="cards" class="cards"></div>
-        </div>
+          <div id="quick_read" class="quick-read"></div>
+        </section>
 
-        <div class="section">
-          <h3>Warnings</h3>
-          <div id="warnings" class="callouts"></div>
-        </div>
-
-        <div class="section">
-          <h3>Coverage And Methodology</h3>
-          <div class="meta-grid">
-            <div class="callout">
-              <h4>Coverage</h4>
-              <div id="coverage"></div>
-            </div>
-            <div class="callout">
-              <h4>Methodology</h4>
-              <div id="methodology"></div>
-            </div>
+        <section class="panel results-nav-panel">
+          <div id="results_nav" class="results-nav">
+            <button class="nav-chip" type="button" data-jump="section-overview">Overview</button>
+            <button class="nav-chip" type="button" data-jump="section-performance">Performance</button>
+            <button class="nav-chip" type="button" data-jump="section-outcomes">Outcomes</button>
+            <button class="nav-chip" type="button" data-jump="section-events">Examples</button>
+            <button class="nav-chip" type="button" data-jump="section-ledger">Matched Stocks</button>
+            <button class="nav-chip" type="button" data-jump="section-segments">Segments</button>
+            <button class="nav-chip" type="button" data-jump="section-caveats">Warnings</button>
+            <button class="nav-chip" type="button" data-jump="section-docs">Downloads</button>
           </div>
-        </div>
+        </section>
 
-        <div class="section">
-          <h3>Output Files</h3>
+        <section class="results-grid" id="section-performance">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Did The Pattern Beat SPY?</h3>
+              <p>Each bar shows average benchmark-relative performance after costs. Positive means the signal beat SPY.</p>
+            </div>
+            <div class="legend">
+              <span><i class="good"></i> Positive after-cost outperformance</span>
+              <span><i class="bad"></i> Negative after-cost outperformance</span>
+            </div>
+            <div id="horizon_chart" class="chart-card"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Summary By Horizon</h3>
+              <p>The four time windows tracked by the study, with the most important metrics surfaced first.</p>
+            </div>
+            <div id="friendly_summary" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <section class="results-grid" id="section-outcomes">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>How Many Stocks Actually Worked?</h3>
+              <p>Each dot is a single stock signal at the 63-trading-day horizon. Right of center means it beat SPY after costs.</p>
+            </div>
+            <div id="distribution_chart"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Stock Scoreboard</h3>
+              <p>The fastest stock-level read: how many beat SPY, the best example, the weakest example, and the typical result.</p>
+            </div>
+            <div id="stock_scoreboard"></div>
+          </div>
+        </section>
+
+        <section class="results-grid" id="section-events">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Strongest Signals</h3>
+              <p>Specific names that looked best at 63 days.</p>
+            </div>
+            <div id="winners_table" class="table-wrap"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Weakest Signals</h3>
+              <p>Specific names that lagged the benchmark the most.</p>
+            </div>
+            <div id="losers_table" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <section class="results-grid" id="section-ledger">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>All Parameter-Matched Events</h3>
+              <p>Every stock event that met the rules, labeled as successful, unsuccessful, mixed, or incomplete.</p>
+            </div>
+            <div id="matched_outcomes_table" class="table-wrap"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Ticker Outcome Summary</h3>
+              <p>A cleaner ticker-level scorecard so repeated winners and losers are easier to spot.</p>
+            </div>
+            <div id="ticker_summary_table" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <section class="results-grid" id="section-segments">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Best Segments</h3>
+              <p>Buckets that looked strongest in this specific run.</p>
+            </div>
+            <div id="best_segments"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Weakest Segments</h3>
+              <p>Buckets that looked weakest in this specific run.</p>
+            </div>
+            <div id="worst_segments"></div>
+          </div>
+        </section>
+
+        <section class="panel section-panel" id="section-caveats">
+          <div class="section-head">
+            <h3>Warnings</h3>
+            <p>These caveats matter. If this section is loud, the run is exploratory rather than reliable.</p>
+          </div>
+          <div id="warnings" class="callouts"></div>
+        </section>
+
+        <section class="results-grid">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Coverage</h3>
+              <p>How much usable data the system actually had for this run.</p>
+            </div>
+            <div id="coverage"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Methodology</h3>
+              <p>The research assumptions used for this result.</p>
+            </div>
+            <div id="methodology"></div>
+          </div>
+        </section>
+
+        <section class="panel section-panel" id="section-docs">
+          <div class="section-head">
+            <h3>Downloads</h3>
+            <p>Raw files in case you want to inspect the study outside the dashboard.</p>
+          </div>
           <div id="files" class="files"></div>
-        </div>
+        </section>
 
-        <div class="section">
-          <h3>Horizon Summary</h3>
-          <div id="summary_table" class="table-wrap"></div>
-        </div>
+        <section class="panel section-panel">
+          <div class="section-head">
+            <h3>Advanced Details</h3>
+            <p>Raw tables are still available when you need them, but they stay hidden by default.</p>
+          </div>
 
-        <div class="section">
-          <h3>Segmented Analysis</h3>
-          <div id="segment_table" class="table-wrap"></div>
-        </div>
+          <details>
+            <summary>Event Details Table</summary>
+            <div id="friendly_events" class="table-wrap"></div>
+          </details>
 
-        <div class="section">
-          <h3>Top Primary Events By 63-Day Net BHAR</h3>
-          <div id="events_table" class="table-wrap"></div>
-        </div>
+          <details>
+            <summary>Raw Horizon Summary Table</summary>
+            <div id="summary_table" class="table-wrap"></div>
+          </details>
 
-        <div class="section">
-          <h3>Console Summary</h3>
-          <pre id="console_summary">Run a study to see results.</pre>
-        </div>
-      </main>
-    </div>
+          <details>
+            <summary>Raw Segmented Analysis Table</summary>
+            <div id="segment_table" class="table-wrap"></div>
+          </details>
+
+          <details>
+            <summary>Console Summary</summary>
+            <div><pre id="console_summary">Run a study to see results.</pre></div>
+          </details>
+        </section>
+      </div>
+    </section>
   </div>
 
   <script>
@@ -425,6 +1401,9 @@
       "tickers",
       "max_filings",
       "benchmark",
+      "external_prices_csv",
+      "external_prices_vendor_profile",
+      "external_prices_mapping_json",
       "window_days",
       "cooldown_days",
       "min_distinct_insiders",
@@ -443,6 +1422,35 @@
 
     const statusNode = document.getElementById("status");
     const runButton = document.getElementById("run_button");
+    const resultsEmpty = document.getElementById("results_empty");
+    const resultsContent = document.getElementById("results_content");
+    const tabButtons = [...document.querySelectorAll(".tab-button")];
+    const tabPanels = [...document.querySelectorAll(".tab-panel")];
+    const navChips = [...document.querySelectorAll(".nav-chip")];
+
+    function setActiveTab(tabName) {
+      for (const button of tabButtons) {
+        button.classList.toggle("active", button.dataset.tab === tabName);
+      }
+      for (const panel of tabPanels) {
+        panel.classList.toggle("active", panel.id === `tab-${tabName}`);
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    for (const button of tabButtons) {
+      button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+    }
+
+    for (const chip of navChips) {
+      chip.addEventListener("click", () => {
+        const target = document.getElementById(chip.dataset.jump);
+        if (!target) {
+          return;
+        }
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
 
     function setStatus(message, isError = false) {
       statusNode.textContent = message;
@@ -457,72 +1465,718 @@
       return payload;
     }
 
-    function renderTable(containerId, rows) {
+    function toNumber(value) {
+      if (value === null || value === undefined || value === "") {
+        return null;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function humanizeKey(value) {
+      return String(value)
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, match => match.toUpperCase());
+    }
+
+    function formatInteger(value) {
+      const parsed = toNumber(value);
+      return parsed === null ? "n/a" : Math.round(parsed).toLocaleString();
+    }
+
+    function formatPct(value, digits = 1) {
+      const parsed = toNumber(value);
+      return parsed === null ? "n/a" : `${(parsed * 100).toFixed(digits)}%`;
+    }
+
+    function formatSignedPct(value, digits = 1) {
+      const parsed = toNumber(value);
+      if (parsed === null) {
+        return "n/a";
+      }
+      const sign = parsed > 0 ? "+" : "";
+      return `${sign}${(parsed * 100).toFixed(digits)}%`;
+    }
+
+    function formatMoney(value) {
+      const parsed = toNumber(value);
+      if (parsed === null) {
+        return "n/a";
+      }
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }).format(parsed);
+    }
+
+    function decodeFlag(value) {
+      const text = String(value || "").trim();
+      if (!text || text === "none") {
+        return "none";
+      }
+      const mapping = {
+        insufficient_sample_for_inference: "Too few completed signals for reliable statistics",
+        potential_delisting_or_missing_price: "Price history ended early or data was missing",
+        benchmark_truncated: "Benchmark history ended before the full horizon",
+        truncated_dataset: "Run ended before the full horizon completed",
+        unknown_market_cap: "Market cap unavailable",
+        next_session_close: "Next session close",
+        next_session_open: "Next session open"
+      };
+      return text
+        .split(";")
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => mapping[part] || humanizeKey(part))
+        .join("; ");
+    }
+
+    function describeWarning(warning) {
+      const text = String(warning || "").trim();
+      const lower = text.toLowerCase();
+
+      if (lower.includes("market-cap filter is inactive")) {
+        return {
+          label: "Data Coverage",
+          title: "Market-cap screening is currently off.",
+          meaning: "The price dataset used for this run does not contain market-cap values, so the market-cap filter could not actually remove any names.",
+          action: "Treat size-sensitive conclusions cautiously, or add a market-cap source before relying on microcap separation."
+        };
+      }
+
+      if (lower.includes("microcap separation is unavailable")) {
+        return {
+          label: "Data Coverage",
+          title: "Microcap analysis is unavailable in this run.",
+          meaning: "Because market-cap coverage is missing, the dashboard cannot separate small names from larger ones in a trustworthy way.",
+          action: "Do not assume the signal is investable across size buckets until market-cap data is available."
+        };
+      }
+
+      if (lower.includes("formal inference is suppressed")) {
+        return {
+          label: "Statistics",
+          title: "There are too few completed signals for formal statistics.",
+          meaning: "The sample is still too small for the t-tests and confidence intervals to be treated as reliable evidence.",
+          action: "Use this run as a directional read only, then expand the date range or collect more completed events."
+        };
+      }
+
+      if (lower.includes("missing price")) {
+        return {
+          label: "Price Data",
+          title: "Some price history is incomplete.",
+          meaning: text,
+          action: "Inspect the affected names before making a judgment on the signal."
+        };
+      }
+
+      return {
+        label: "Research Caveat",
+        title: decodeFlag(text.endsWith(".") ? text.slice(0, -1) : text),
+        meaning: text,
+        action: "Review this caveat before treating the run as a dependable result."
+      };
+    }
+
+    function yesNoText(value) {
+      if (String(value).toLowerCase() === "yes") {
+        return "Yes";
+      }
+      if (String(value).toLowerCase() === "no") {
+        return "No";
+      }
+      return value || "n/a";
+    }
+
+    function parseSummaryRows(result, sampleName) {
+      return (result.study.summary_rows || [])
+        .filter(row => row.sample_name === sampleName)
+        .sort((a, b) => Number(a.horizon_days) - Number(b.horizon_days));
+    }
+
+    function parseSegmentRows(result, sampleName) {
+      return (result.study.segment_rows || [])
+        .filter(row => row.sample_name === sampleName);
+    }
+
+    function chooseFocusSample(result) {
+      const investableRows = parseSummaryRows(result, "investable_primary");
+      if (investableRows.some(row => Number(row.complete_event_count) > 0)) {
+        return "investable_primary";
+      }
+      return "all_primary";
+    }
+
+    function sampleLabel(sampleName) {
+      return sampleName === "investable_primary" ? "Investable primary events" : "All primary events";
+    }
+
+    function buildDecisionState(reference, warningCount) {
+      if (!reference) {
+        return {
+          tone: "warn",
+          label: "No Read Yet",
+          title: "No complete horizon was available for the selected sample.",
+          detail: "The run finished, but there was not enough completed return data to judge the rule set."
+        };
+      }
+
+      const completeEvents = Number(reference.complete_event_count || 0);
+      const meanNet = toNumber(reference.mean_net_bhar_return) || 0;
+      const positiveRate = toNumber(reference.positive_net_bhar_rate) || 0;
+
+      if (completeEvents < 10) {
+        return {
+          tone: "warn",
+          label: "Too Early",
+          title: "The signal is still exploratory.",
+          detail: `Only ${completeEvents} complete events were available at ${reference.horizon_days}d, so this run is useful for direction, not proof.`
+        };
+      }
+
+      if (meanNet > 0.03 && positiveRate >= 0.55 && warningCount <= 2) {
+        return {
+          tone: "good",
+          label: "Promising",
+          title: "The current rules look directionally encouraging.",
+          detail: `Average benchmark-relative performance was ${formatSignedPct(meanNet)} after costs, with ${formatPct(positiveRate)} of events beating SPY.`
+        };
+      }
+
+      if (meanNet > 0) {
+        return {
+          tone: "warn",
+          label: "Mixed",
+          title: "The signal leans positive, but not convincingly yet.",
+          detail: `The average edge was ${formatSignedPct(meanNet)} after costs, but the evidence is not yet strong enough to treat as robust.`
+        };
+      }
+
+      return {
+        tone: "bad",
+        label: "Weak",
+        title: "The current rules are not beating SPY in a convincing way.",
+        detail: `Average benchmark-relative performance was ${formatSignedPct(meanNet)} after costs, so this version of the rule set looks weak.`
+      };
+    }
+
+    function pickReferenceRow(rows) {
+      return rows.find(row => Number(row.horizon_days) === 63 && Number(row.complete_event_count) > 0)
+        || rows.find(row => Number(row.complete_event_count) > 0)
+        || null;
+    }
+
+    function renderTable(containerId, rows, columns = null) {
       const container = document.getElementById(containerId);
       if (!rows || !rows.length) {
-        container.innerHTML = "<p class='hint'>No rows available.</p>";
+        container.innerHTML = "<div class='empty-state'>No rows available.</div>";
         return;
       }
-      const columns = Object.keys(rows[0]);
-      const thead = `<thead><tr>${columns.map(column => `<th>${column}</th>`).join("")}</tr></thead>`;
-      const tbody = `<tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${row[column] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>`;
+      const finalColumns = columns || Object.keys(rows[0]);
+      const thead = `<thead><tr>${finalColumns.map(column => `<th>${humanizeKey(column)}</th>`).join("")}</tr></thead>`;
+      const tbody = `<tbody>${rows.map(row => `<tr>${finalColumns.map(column => `<td>${row[column] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>`;
       container.innerHTML = `<table>${thead}${tbody}</table>`;
     }
 
-    function renderCards(result) {
+    function renderCards(result, focusRows) {
       const cards = document.getElementById("cards");
+      const reference = pickReferenceRow(focusRows);
+      const warningCount = (result.warnings || []).length;
       const items = [
-        ["SEC filings", result.download.processed_filing_count],
-        ["Insider rows", result.download.insider_rows],
-        ["Unique issuers", result.download.unique_issuer_count],
-        ["Raw candidates", result.study.candidate_count],
-        ["Raw qualified", result.study.raw_qualified_count],
-        ["Primary events", result.study.qualified_count],
-        ["Investable", result.study.investable_count],
-        ["Rejected", result.study.rejected_count],
-        ["Price tickers", result.download.price_ticker_count]
+        {
+          label: "Signals Found",
+          value: formatInteger(result.study.candidate_count),
+          subvalue: `${formatInteger(result.study.qualified_count)} primary events after filters`
+        },
+        {
+          label: "Investable Signals",
+          value: formatInteger(result.study.investable_count),
+          subvalue: `${formatPct(result.coverage.primary_investable_pct || 0)} of primary events`
+        },
+        {
+          label: "Best Read Window",
+          value: reference ? `${reference.horizon_days}d` : "n/a",
+          subvalue: reference ? sampleLabel(chooseFocusSample(result)) : "No complete horizons yet"
+        },
+        {
+          label: "Avg Beat Vs SPY",
+          value: reference ? formatSignedPct(reference.mean_net_bhar_return) : "n/a",
+          subvalue: "After costs"
+        },
+        {
+          label: "Positive Rate",
+          value: reference ? formatPct(reference.positive_net_bhar_rate) : "n/a",
+          subvalue: "Fraction of events that beat SPY"
+        },
+        {
+          label: "Warnings",
+          value: String(warningCount),
+          subvalue: warningCount ? "Read before trusting the signal" : "No major caveats raised"
+        }
       ];
-      cards.innerHTML = items.map(([label, value]) => `
+
+      cards.innerHTML = items.map(item => `
         <div class="card">
-          <div class="label">${label}</div>
-          <div class="value">${value}</div>
+          <div class="label">${item.label}</div>
+          <div class="value">${item.value}</div>
+          <div class="subvalue">${item.subvalue}</div>
         </div>
       `).join("");
+    }
+
+    function renderDecisionStrip(result, focusRows) {
+      const container = document.getElementById("decision_strip");
+      const snapshot = document.getElementById("run_snapshot");
+      const reference = pickReferenceRow(focusRows);
+      const focusSample = chooseFocusSample(result);
+      const decision = buildDecisionState(reference, (result.warnings || []).length);
+
+      container.innerHTML = `
+        <div class="decision-top">
+          <div class="decision-copy">
+            <div class="decision-badge ${decision.tone}">${decision.label}</div>
+            <h3>${decision.title}</h3>
+            <p>${decision.detail}</p>
+          </div>
+        </div>
+      `;
+
+      const snapshotItems = [
+        `Sample: ${sampleLabel(focusSample)}`,
+        `Benchmark: ${result.study.benchmark}`,
+        `Signals: ${formatInteger(result.study.qualified_count)}`,
+        `Investable: ${formatInteger(result.study.investable_count)}`,
+        `Filings processed: ${formatInteger(result.download.processed_filing_count)}`,
+        `Price mode: ${result.download.price_input_mode === "external_csv" ? "external csv" : "public download"}`,
+        `Date window: ${document.getElementById("start_date").value} to ${document.getElementById("end_date").value}`
+      ];
+
+      if (result.download.price_input_mode === "external_csv") {
+        snapshotItems.push(`Vendor profile: ${result.download.price_vendor_profile || "generic"}`);
+        if (result.download.price_mapping_json) {
+          snapshotItems.push("Custom mapping: yes");
+        }
+      }
+
+      if (reference) {
+        snapshotItems.push(`Reference horizon: ${reference.horizon_days}d`);
+      }
+
+      snapshot.innerHTML = snapshotItems
+        .map(item => `<div class="snapshot-pill">${item}</div>`)
+        .join("");
+    }
+
+    function renderQuickRead(result, focusRows) {
+      const container = document.getElementById("quick_read");
+      const reference = pickReferenceRow(focusRows);
+      const focusSample = chooseFocusSample(result);
+      if (!reference) {
+        container.innerHTML = `
+          <h3>Not enough complete data yet.</h3>
+          <p>The run finished, but none of the tracked horizons had complete forward-return observations for the chosen sample.</p>
+        `;
+        return;
+      }
+
+      const eventCount = Number(reference.complete_event_count || 0);
+      const meanNet = toNumber(reference.mean_net_bhar_return);
+      const positiveRate = toNumber(reference.positive_net_bhar_rate);
+      const warningFlags = reference.warning_flags || "none";
+
+      let headline = `${sampleLabel(focusSample)} beat SPY by ${formatSignedPct(meanNet)} on average over ${reference.horizon_days} trading days after costs.`;
+      if (meanNet !== null && meanNet < 0) {
+        headline = `${sampleLabel(focusSample)} lagged SPY by ${formatSignedPct(meanNet)} on average over ${reference.horizon_days} trading days after costs.`;
+      }
+      if (eventCount < 10) {
+        headline = `Very early read: only ${eventCount} complete ${sampleLabel(focusSample).toLowerCase()} were available, so treat this run as directional rather than reliable.`;
+      }
+
+      const takeaways = [
+        `${formatInteger(result.study.candidate_count)} raw insider clusters were found, and ${formatInteger(result.study.investable_count)} were investable under the chosen position-size and ADV rules.`,
+        `${formatPct(positiveRate)} of the ${eventCount} complete events beat SPY after costs in the ${reference.horizon_days}-day window.`,
+        `This view is based on ${sampleLabel(focusSample).toLowerCase()}, which is the best sample for judging whether the signal is actually tradable.`,
+        warningFlags !== "none"
+          ? `This horizon still carries caution flags: ${decodeFlag(warningFlags)}.`
+          : "No horizon-specific caution flags were raised for this reference window."
+      ];
+
+      container.innerHTML = `
+        <div>
+          <h3>${headline}</h3>
+          <p>Mechanical-engineer version: positive numbers mean the stocks did better than SPY after the trading-cost assumptions. Negative numbers mean they did worse.</p>
+        </div>
+        <div class="chips">
+          <div class="chip">Focus sample: <strong>${sampleLabel(focusSample)}</strong></div>
+          <div class="chip">Reference horizon: <strong>${reference.horizon_days}d</strong></div>
+          <div class="chip">Average net edge: <strong>${formatSignedPct(meanNet)}</strong></div>
+          <div class="chip">Positive rate: <strong>${formatPct(positiveRate)}</strong></div>
+        </div>
+        <div class="callouts">
+          ${takeaways.map(item => `<div class="callout">${item}</div>`).join("")}
+        </div>
+      `;
+    }
+
+    function renderHorizonChart(result, focusRows) {
+      const container = document.getElementById("horizon_chart");
+      const usableRows = focusRows.filter(row => Number(row.complete_event_count) > 0);
+      if (!usableRows.length) {
+        container.innerHTML = "<div class='empty-state'>No complete horizons available yet.</div>";
+        return;
+      }
+
+      const maxAbs = Math.max(...usableRows.map(row => Math.abs(toNumber(row.mean_net_bhar_return) || 0)), 0.01);
+      container.innerHTML = `
+        <div class="chart-list">
+          ${usableRows.map(row => {
+            const value = toNumber(row.mean_net_bhar_return) || 0;
+            const width = Math.max((Math.abs(value) / maxAbs) * 50, 1);
+            const direction = value >= 0 ? "positive" : "negative";
+            return `
+              <div class="chart-row">
+                <div class="chart-label">${row.horizon_days}d</div>
+                <div class="chart-track">
+                  <div class="chart-bar ${direction}" style="width:${width}%"></div>
+                </div>
+                <div class="chart-meta">
+                  <div><strong>${formatSignedPct(row.mean_net_bhar_return)}</strong> vs SPY after costs</div>
+                  <div>${formatInteger(row.complete_event_count)} complete events</div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderFriendlySummary(result, focusRows) {
+      const rows = focusRows.map(row => ({
+        horizon: `${row.horizon_days}d`,
+        complete_events: formatInteger(row.complete_event_count),
+        avg_net_beat_vs_spy: formatSignedPct(row.mean_net_bhar_return),
+        avg_gross_beat_vs_spy: formatSignedPct(row.mean_bhar_return),
+        positive_after_costs: formatPct(row.positive_net_bhar_rate),
+        warning_flags: decodeFlag(row.warning_flags || "none")
+      }));
+      renderTable("friendly_summary", rows, [
+        "horizon",
+        "complete_events",
+        "avg_net_beat_vs_spy",
+        "avg_gross_beat_vs_spy",
+        "positive_after_costs",
+        "warning_flags"
+      ]);
+    }
+
+    function completeEventRows(result, horizon = 63) {
+      const key = `net_bhar_return_${horizon}d`;
+      const completeKey = `complete_${horizon}d`;
+      return [...(result.study.event_rows || [])]
+        .filter(row => row[completeKey] === "yes" && row[key] !== "")
+        .sort((a, b) => Number(b[key]) - Number(a[key]));
+    }
+
+    function renderDistribution(result) {
+      const container = document.getElementById("distribution_chart");
+      const rows = completeEventRows(result, 63);
+      if (!rows.length) {
+        container.innerHTML = "<div class='empty-state'>No complete 63-day outcomes yet.</div>";
+        return;
+      }
+
+      const values = rows.map(row => Number(row.net_bhar_return_63d));
+      const minValue = Math.min(...values, -0.01);
+      const maxValue = Math.max(...values, 0.01);
+      const span = maxValue - minValue || 1;
+
+      container.innerHTML = `
+        <div class="distribution">
+          <div class="distribution-axis">
+            <span>Lagged SPY</span>
+            <span>Beat SPY</span>
+          </div>
+          ${rows.map(row => {
+            const value = Number(row.net_bhar_return_63d);
+            const left = ((value - minValue) / span) * 100;
+            const dotClass = value >= 0 ? "positive" : "negative";
+            return `
+              <div class="distribution-row">
+                <div class="distribution-name">${row.ticker}</div>
+                <div class="distribution-track">
+                  <div class="distribution-dot ${dotClass}" style="left:${left}%"></div>
+                </div>
+                <div class="distribution-value">${formatSignedPct(value)}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderStockScoreboard(result, focusRows) {
+      const container = document.getElementById("stock_scoreboard");
+      const rows = completeEventRows(result, 63);
+      if (!rows.length) {
+        container.innerHTML = "<div class='empty-state'>No complete 63-day stock outcomes yet.</div>";
+        return;
+      }
+
+      const beaters = rows.filter(row => Number(row.net_bhar_return_63d) > 0);
+      const best = rows[0];
+      const worst = rows[rows.length - 1];
+      const reference = pickReferenceRow(focusRows);
+
+      container.innerHTML = `
+        <div class="score-grid">
+          <div class="score-card">
+            <h4>Beat SPY After Costs</h4>
+            <div class="score-value">${formatInteger(beaters.length)} / ${formatInteger(rows.length)}</div>
+            <div class="score-detail">${formatPct(rows.length ? beaters.length / rows.length : 0)} of complete 63-day events finished ahead of SPY.</div>
+          </div>
+          <div class="score-card">
+            <h4>Best Example</h4>
+            <div class="score-value">${best.ticker}</div>
+            <div class="score-detail">${best.issuer_name}<br>${formatSignedPct(best.net_bhar_return_63d)} vs SPY at 63d</div>
+          </div>
+          <div class="score-card">
+            <h4>Weakest Example</h4>
+            <div class="score-value">${worst.ticker}</div>
+            <div class="score-detail">${worst.issuer_name}<br>${formatSignedPct(worst.net_bhar_return_63d)} vs SPY at 63d</div>
+          </div>
+          <div class="score-card">
+            <h4>Typical Outcome</h4>
+            <div class="score-value">${reference ? formatSignedPct(reference.median_net_bhar_return) : "n/a"}</div>
+            <div class="score-detail">Median benchmark-relative result for the focus sample. This is a better "typical" read than the single best name.</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function rankEvents(rows, horizon = 63, descending = true, limit = 5) {
+      const key = `net_bhar_return_${horizon}d`;
+      const completeKey = `complete_${horizon}d`;
+      return [...(rows || [])]
+        .filter(row => row[completeKey] === "yes" && row[key] !== "")
+        .sort((a, b) => descending ? Number(b[key]) - Number(a[key]) : Number(a[key]) - Number(b[key]))
+        .slice(0, limit)
+        .map(row => ({
+          ticker: row.ticker,
+          company: row.issuer_name,
+          event_date: row.event_date,
+          insiders: row.distinct_insiders,
+          total_buy: formatMoney(row.total_purchase_value),
+          beat_spy_63d: formatSignedPct(row.net_bhar_return_63d),
+          beat_spy_126d: formatSignedPct(row.net_bhar_return_126d),
+          liquidity: row.liquidity_bucket,
+          flags: decodeFlag(row.data_quality_flags || "none")
+        }));
+    }
+
+    function renderEventLists(result) {
+      const winners = rankEvents(result.study.event_rows, 63, true, 5);
+      const losers = rankEvents(result.study.event_rows, 63, false, 5);
+      renderTable("winners_table", winners, [
+        "ticker",
+        "company",
+        "event_date",
+        "insiders",
+        "total_buy",
+        "beat_spy_63d",
+        "beat_spy_126d",
+        "liquidity"
+      ]);
+      renderTable("losers_table", losers, [
+        "ticker",
+        "company",
+        "event_date",
+        "insiders",
+        "total_buy",
+        "beat_spy_63d",
+        "beat_spy_126d",
+        "liquidity"
+      ]);
+    }
+
+    function renderSegmentInsights(result, focusSample) {
+      const rows = parseSegmentRows(result, focusSample)
+        .filter(row => Number(row.horizon_days) === 63 && Number(row.complete_event_count) > 0)
+        .sort((a, b) => Number(b.mean_net_bhar_return || 0) - Number(a.mean_net_bhar_return || 0));
+
+      const best = rows.slice(0, 5);
+      const worst = [...rows]
+        .sort((a, b) => Number(a.mean_net_bhar_return || 0) - Number(b.mean_net_bhar_return || 0))
+        .slice(0, 5);
+
+      const renderList = list => {
+        if (!list.length) {
+          return "<div class='empty-state'>No segment-level clues yet.</div>";
+        }
+        return `
+          <div class="callouts">
+            ${list.map(row => `
+              <div class="callout">
+                <strong>${humanizeKey(row.segment_type)}: ${row.segment_name}</strong><br>
+                Net beat vs SPY: ${formatSignedPct(row.mean_net_bhar_return)}<br>
+                Events: ${formatInteger(row.complete_event_count)}<br>
+                Positive rate: ${formatPct(row.positive_net_bhar_rate)}
+              </div>
+            `).join("")}
+          </div>
+        `;
+      };
+
+      document.getElementById("best_segments").innerHTML = renderList(best);
+      document.getElementById("worst_segments").innerHTML = renderList(worst);
+    }
+
+    function renderProductionTables(result) {
+      const matchedRows = (result.study.parameter_outcome_rows || []).map(row => ({
+        ticker: row.ticker,
+        company: row.issuer_name,
+        event_date: row.event_date,
+        reference_horizon: row.reference_horizon_days ? `${row.reference_horizon_days}d` : "n/a",
+        reference_outcome: humanizeKey(row.reference_outcome),
+        overall_outcome: humanizeKey(row.overall_outcome),
+        reference_net_bhar: formatSignedPct(row.reference_net_bhar_return),
+        investable: yesNoText(row.investable_under_capacity),
+        sector: row.sector || "n/a",
+        industry: row.industry || "n/a"
+      }));
+      renderTable("matched_outcomes_table", matchedRows, [
+        "ticker",
+        "company",
+        "event_date",
+        "reference_horizon",
+        "reference_outcome",
+        "overall_outcome",
+        "reference_net_bhar",
+        "investable",
+        "sector",
+        "industry"
+      ]);
+
+      const tickerRows = (result.study.ticker_summary_rows || []).map(row => ({
+        ticker: row.ticker,
+        company: row.issuer_name,
+        event_count: row.event_count,
+        investable_events: row.investable_event_count,
+        success_rate: formatPct(row.reference_success_rate),
+        mean_reference_net_bhar: formatSignedPct(row.mean_reference_net_bhar_return),
+        sector: row.sector || "n/a",
+        industry: row.industry || "n/a",
+        first_event: row.first_event_date,
+        last_event: row.last_event_date
+      }));
+      renderTable("ticker_summary_table", tickerRows, [
+        "ticker",
+        "company",
+        "event_count",
+        "investable_events",
+        "success_rate",
+        "mean_reference_net_bhar",
+        "sector",
+        "industry",
+        "first_event",
+        "last_event"
+      ]);
     }
 
     function renderWarnings(warnings) {
       const container = document.getElementById("warnings");
       if (!warnings || !warnings.length) {
-        container.innerHTML = "<div class='callout'><strong>No active Stage 1 warnings.</strong></div>";
+        container.innerHTML = "<div class='callout'><strong>No active warnings.</strong> That does not prove the signal works. It only means this run did not trigger additional caveat checks.</div>";
         return;
       }
-      container.innerHTML = warnings.map(warning => `
-        <div class="callout warn">${warning}</div>
-      `).join("");
+      const cards = warnings.map(describeWarning);
+      container.innerHTML = `
+        <div class="warning-list">
+          ${cards.map(card => `
+            <div class="warning-card">
+              <div class="warning-top">
+                <strong>${card.title}</strong>
+                <span class="warning-label">${card.label}</span>
+              </div>
+              <div class="warning-body">
+                <div><strong>What this means:</strong> ${card.meaning}</div>
+                <div><strong>What to do:</strong> ${card.action}</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
     }
 
     function renderKeyValueList(containerId, data) {
       const container = document.getElementById(containerId);
       const rows = Object.entries(data || {});
       if (!rows.length) {
-        container.innerHTML = "<p class='hint'>No details available.</p>";
+        container.innerHTML = "<div class='empty-state'>No details available.</div>";
         return;
       }
       container.innerHTML = `<ul class="meta-list">${rows.map(([label, value]) => `
-        <li><strong>${label}</strong>: ${value}</li>
+        <li><strong>${humanizeKey(label)}</strong>: ${value}</li>
       `).join("")}</ul>`;
     }
 
     function renderFiles(files) {
       const container = document.getElementById("files");
       container.innerHTML = Object.entries(files).map(([label, href]) => `
-        <a href="${href}" target="_blank" rel="noreferrer">${label}</a>
+        <a href="${href}" target="_blank" rel="noreferrer">${humanizeKey(label)}</a>
       `).join("");
     }
 
+    function renderFriendlyEvents(result) {
+      const rows = (result.study.event_rows || [])
+        .map(row => ({
+          ticker: row.ticker,
+          company: row.issuer_name,
+          event_date: row.event_date,
+          insiders: row.distinct_insiders,
+          total_buy: formatMoney(row.total_purchase_value),
+          total_buy_vs_adv: formatPct(row.adv_participation_rate, 2),
+          beat_spy_63d_after_costs: formatSignedPct(row.net_bhar_return_63d),
+          beat_spy_126d_after_costs: formatSignedPct(row.net_bhar_return_126d),
+          liquidity: row.liquidity_bucket,
+          investable: yesNoText(row.investable_under_capacity),
+          timing: decodeFlag(row.entry_timing),
+          flags: decodeFlag(row.data_quality_flags || "none")
+        }))
+        .sort((a, b) => {
+          const aValue = Number(a.beat_spy_63d_after_costs.replace("%", "")) || 0;
+          const bValue = Number(b.beat_spy_63d_after_costs.replace("%", "")) || 0;
+          return bValue - aValue;
+        });
+
+      renderTable("friendly_events", rows, [
+        "ticker",
+        "company",
+        "event_date",
+        "insiders",
+        "total_buy",
+        "total_buy_vs_adv",
+        "beat_spy_63d_after_costs",
+        "beat_spy_126d_after_costs",
+        "liquidity",
+        "investable",
+        "timing",
+        "flags"
+      ]);
+    }
+
+    function renderRawTables(result) {
+      renderTable("summary_table", result.study.summary_rows);
+      renderTable("segment_table", result.study.segment_rows);
+      renderFriendlyEvents(result);
+      document.getElementById("console_summary").textContent = result.console_summary;
+    }
+
     async function runStudy() {
-      setStatus("Fetching SEC filings, downloading prices, and running the study. This can take a while for larger ranges.");
+      setStatus("Fetching SEC filings, downloading prices, and running the study. Larger date ranges can take a while.");
       runButton.disabled = true;
+      setActiveTab("inputs");
 
       try {
         const response = await fetch("/api/run", {
@@ -535,22 +2189,37 @@
           throw new Error(result.error || "Study run failed.");
         }
 
-        renderCards(result);
+        const focusSample = chooseFocusSample(result);
+        const focusRows = parseSummaryRows(result, focusSample);
+
+        renderDecisionStrip(result, focusRows);
+        renderCards(result, focusRows);
+        renderQuickRead(result, focusRows);
+        renderHorizonChart(result, focusRows);
+        renderFriendlySummary(result, focusRows);
+        renderDistribution(result);
+        renderStockScoreboard(result, focusRows);
+        renderEventLists(result);
+        renderProductionTables(result);
+        renderSegmentInsights(result, focusSample);
         renderWarnings(result.warnings);
         renderKeyValueList("coverage", result.coverage);
         renderKeyValueList("methodology", result.methodology);
         renderFiles(result.files);
-        renderTable("summary_table", result.study.summary_rows);
-        renderTable("segment_table", result.study.segment_rows);
-        renderTable("events_table", result.study.top_events_63d);
-        document.getElementById("console_summary").textContent = result.console_summary;
+        renderRawTables(result);
+
+        resultsEmpty.hidden = true;
+        resultsContent.hidden = false;
 
         const missing = result.download.missing_price_tickers.length
           ? ` Missing price tickers: ${result.download.missing_price_tickers.slice(0, 12).join(", ")}`
           : "";
+
         setStatus(`Run complete. Outputs written to ${result.run_dir}.${missing}`);
+        setActiveTab("results");
       } catch (error) {
         setStatus(error.message, true);
+        setActiveTab("inputs");
       } finally {
         runButton.disabled = false;
       }

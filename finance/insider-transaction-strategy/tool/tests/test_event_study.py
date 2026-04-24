@@ -19,6 +19,11 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> 
         writer.writerows(rows)
 
 
+def read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
 def business_days(start: date, count: int) -> list[date]:
     days: list[date] = []
     current = start
@@ -131,6 +136,12 @@ def test_run_study_uses_primary_events_and_bhar(tmp_path: Path) -> None:
                 "adj_close": f"{test_close:.6f}",
                 "volume": "200000",
                 "market_cap": "",
+                "shares_outstanding": "10000000",
+                "sector": "Real Estate",
+                "industry": "REIT",
+                "exchange": "NYSE",
+                "country": "US",
+                "price_source": "test_vendor",
             }
         )
         price_rows.append(
@@ -147,6 +158,12 @@ def test_run_study_uses_primary_events_and_bhar(tmp_path: Path) -> None:
                 "adj_close": f"{spy_close:.6f}",
                 "volume": "1000000",
                 "market_cap": "",
+                "shares_outstanding": "",
+                "sector": "",
+                "industry": "",
+                "exchange": "",
+                "country": "",
+                "price_source": "test_vendor",
             }
         )
 
@@ -165,6 +182,12 @@ def test_run_study_uses_primary_events_and_bhar(tmp_path: Path) -> None:
             "adj_close",
             "volume",
             "market_cap",
+            "shares_outstanding",
+            "sector",
+            "industry",
+            "exchange",
+            "country",
+            "price_source",
         ],
         price_rows,
     )
@@ -201,4 +224,21 @@ def test_run_study_uses_primary_events_and_bhar(tmp_path: Path) -> None:
     assert float(event_row["net_bhar_return_21d"]) < float(event_row["bhar_return_21d"])
     assert event_row["investable_under_capacity"] == "yes"
     assert event_row["horizon_flag_21d"] == "complete"
+    assert event_row["sector"] == "Real Estate"
+    assert event_row["industry"] == "REIT"
+    assert event_row["price_source"] == "test_vendor"
     assert summary_21d["warning_flags"] == "insufficient_sample_for_inference"
+
+    parameter_outcomes = read_csv_rows(output_dir / "parameter_matched_outcomes.csv")
+    ticker_summary = read_csv_rows(output_dir / "ticker_outcome_summary.csv")
+    assert len(parameter_outcomes) == 1
+    assert parameter_outcomes[0]["ticker"] == "TEST"
+    assert parameter_outcomes[0]["reference_horizon_days"] == "63"
+    assert parameter_outcomes[0]["reference_outcome"] == "successful"
+    assert parameter_outcomes[0]["overall_outcome"] == "successful"
+    assert parameter_outcomes[0]["success_21d"] == "successful"
+    assert parameter_outcomes[0]["sector"] == "Real Estate"
+    assert len(ticker_summary) == 1
+    assert ticker_summary[0]["ticker"] == "TEST"
+    assert ticker_summary[0]["successful_reference_event_count"] == "1"
+    assert (output_dir / "research_summary.json").exists()

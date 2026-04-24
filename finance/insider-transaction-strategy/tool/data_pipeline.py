@@ -17,6 +17,7 @@ from typing import Iterable, Optional
 from cache_utils import cache_path, read_or_fetch_bytes, read_or_fetch_text
 from form4_normalization import mark_superseded_amendments, parse_form4_rows
 from price_loader import fetch_yahoo_history
+from vendor_price_adapters import normalize_price_rows
 
 SEC_ARCHIVES_URL = "https://www.sec.gov/Archives"
 FORM_TYPES = {"4", "4/A"}
@@ -311,6 +312,12 @@ def download_price_history(
                         "adj_close": row.get("adj_close", ""),
                         "volume": row.get("volume", ""),
                         "market_cap": row.get("market_cap", ""),
+                        "shares_outstanding": row.get("shares_outstanding", ""),
+                        "sector": row.get("sector", ""),
+                        "industry": row.get("industry", ""),
+                        "exchange": row.get("exchange", ""),
+                        "country": row.get("country", ""),
+                        "price_source": row.get("price_source", "yahoo_public"),
                     }
                 )
                 kept_any = True
@@ -336,6 +343,12 @@ def download_price_history(
         "adj_close",
         "volume",
         "market_cap",
+        "shares_outstanding",
+        "sector",
+        "industry",
+        "exchange",
+        "country",
+        "price_source",
     ]
     write_csv(output_csv, all_rows, fieldnames)
     return {
@@ -346,6 +359,118 @@ def download_price_history(
         "adjusted_price_row_count": adjusted_price_row_count,
         "market_cap_row_count": market_cap_row_count,
         "cache_dir": str(cache_root),
+    }
+
+
+def normalize_external_price_history(
+    *,
+    input_csv: Path,
+    benchmark_ticker: str,
+    start_date: date,
+    end_date: date,
+    output_csv: Path,
+    lookback_padding_days: int = 60,
+    forward_padding_days: int = 400,
+    cache_root: Path = CACHE_ROOT,
+    vendor_profile: str = "generic",
+    mapping_json: Optional[Path] = None,
+) -> dict[str, object]:
+    padded_start = start_date - timedelta(days=lookback_padding_days)
+    padded_end = end_date + timedelta(days=forward_padding_days)
+    all_rows, adapter_result = normalize_price_rows(
+        input_csv=input_csv,
+        start_date=start_date,
+        end_date=end_date,
+        lookback_padding_days=lookback_padding_days,
+        forward_padding_days=forward_padding_days,
+        vendor_profile=vendor_profile,
+        mapping_json=mapping_json,
+    )
+    seen_pairs = {(row["ticker"], row["date"]) for row in all_rows}
+    downloaded = list(adapter_result["downloaded_tickers"])
+    adjusted_price_row_count = int(adapter_result["adjusted_price_row_count"])
+    market_cap_row_count = int(adapter_result["market_cap_row_count"])
+
+    benchmark = normalize_ticker(benchmark_ticker)
+    benchmark_present = any(row["ticker"] == benchmark for row in all_rows)
+    if not benchmark_present:
+        benchmark_rows = fetch_yahoo_history(benchmark, padded_start, padded_end, cache_root)
+        for row in benchmark_rows:
+            trading_date = parse_date(row.get("date", ""))
+            if trading_date < padded_start or trading_date > padded_end:
+                continue
+            key = (benchmark, trading_date.isoformat())
+            if key in seen_pairs:
+                continue
+            seen_pairs.add(key)
+            adjusted_price_row_count += 1 if row.get("adj_close") else 0
+            all_rows.append(
+                {
+                    "ticker": benchmark,
+                    "date": trading_date.isoformat(),
+                    "open": row.get("open", ""),
+                    "high": row.get("high", ""),
+                    "low": row.get("low", ""),
+                    "close": row.get("close", ""),
+                    "adj_open": row.get("adj_open", ""),
+                    "adj_high": row.get("adj_high", ""),
+                    "adj_low": row.get("adj_low", ""),
+                    "adj_close": row.get("adj_close", ""),
+                    "volume": row.get("volume", ""),
+                    "market_cap": row.get("market_cap", ""),
+                    "shares_outstanding": row.get("shares_outstanding", ""),
+                    "sector": row.get("sector", ""),
+                    "industry": row.get("industry", ""),
+                    "exchange": row.get("exchange", ""),
+                    "country": row.get("country", ""),
+                    "price_source": row.get("price_source", "yahoo_public"),
+                }
+            )
+        if benchmark_rows and benchmark not in downloaded:
+            downloaded.append(benchmark)
+
+    all_rows.sort(key=lambda row: (row["ticker"], row["date"]))
+    fieldnames = [
+        "ticker",
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "adj_open",
+        "adj_high",
+        "adj_low",
+        "adj_close",
+        "volume",
+        "market_cap",
+        "shares_outstanding",
+        "sector",
+        "industry",
+        "exchange",
+        "country",
+        "price_source",
+    ]
+    write_csv(output_csv, all_rows, fieldnames)
+
+    return {
+        "output_csv": output_csv,
+        "row_count": len(all_rows),
+        "downloaded_tickers": downloaded,
+        "missing_tickers": [],
+        "adjusted_price_row_count": adjusted_price_row_count,
+        "market_cap_row_count": market_cap_row_count,
+        "cache_dir": str(cache_root),
+        "input_mode": "external_csv",
+        "input_csv": str(input_csv),
+        "benchmark_supplemented": "no" if benchmark_present else "yes",
+        "price_vendor_profile": adapter_result["price_vendor_profile"],
+        "price_vendor_description": adapter_result["price_vendor_description"],
+        "price_mapping_json": adapter_result["price_mapping_json"],
+        "skipped_row_count": adapter_result["skipped_row_count"],
+        "duplicate_row_count": adapter_result["duplicate_row_count"],
+        "derived_market_cap_row_count": adapter_result["derived_market_cap_row_count"],
+        "derived_adjusted_ohlc_row_count": adapter_result["derived_adjusted_ohlc_row_count"],
+        "field_coverage_pct": adapter_result["field_coverage_pct"],
     }
 
 
@@ -375,6 +500,21 @@ def parse_args() -> argparse.Namespace:
         default="SPY",
         help="Benchmark ticker to include in the price download. Default: SPY.",
     )
+    parser.add_argument(
+        "--prices-input-csv",
+        type=Path,
+        help="Optional local CSV of richer historical prices/reference data. When provided, this is normalized instead of using the public price downloader.",
+    )
+    parser.add_argument(
+        "--prices-vendor-profile",
+        default="generic",
+        help="Vendor adapter profile for --prices-input-csv. Options: generic, normalized, institutional.",
+    )
+    parser.add_argument(
+        "--prices-mapping-json",
+        type=Path,
+        help="Optional JSON file overriding column mappings/constants for --prices-input-csv.",
+    )
     return parser.parse_args()
 
 
@@ -396,13 +536,24 @@ def main() -> int:
         ticker_filter=ticker_filter,
         max_filings=args.max_filings,
     )
-    price_result = download_price_history(
-        tickers=set(insider_result["unique_tickers"]),
-        benchmark_ticker=args.benchmark,
-        start_date=start_date,
-        end_date=end_date,
-        output_csv=prices_csv,
-    )
+    if args.prices_input_csv:
+        price_result = normalize_external_price_history(
+            input_csv=args.prices_input_csv,
+            benchmark_ticker=args.benchmark,
+            start_date=start_date,
+            end_date=end_date,
+            output_csv=prices_csv,
+            vendor_profile=args.prices_vendor_profile,
+            mapping_json=args.prices_mapping_json,
+        )
+    else:
+        price_result = download_price_history(
+            tickers=set(insider_result["unique_tickers"]),
+            benchmark_ticker=args.benchmark,
+            start_date=start_date,
+            end_date=end_date,
+            output_csv=prices_csv,
+        )
 
     print("Downloaded raw study inputs")
     print(f"Insider rows: {insider_result['row_count']}")
@@ -413,6 +564,16 @@ def main() -> int:
     print(f"Price rows: {price_result['row_count']}")
     print(f"Adjusted-price rows: {price_result['adjusted_price_row_count']}")
     print(f"Price tickers downloaded: {len(price_result['downloaded_tickers'])}")
+    if price_result.get("input_mode") == "external_csv":
+        print(f"Price input mode: external CSV ({price_result['input_csv']})")
+        print(f"Vendor profile: {price_result.get('price_vendor_profile', 'generic')}")
+        if price_result.get("price_mapping_json"):
+            print(f"Mapping JSON: {price_result['price_mapping_json']}")
+        print(f"Benchmark supplemented: {price_result.get('benchmark_supplemented', 'no')}")
+        print(f"Skipped external price rows: {price_result.get('skipped_row_count', 0)}")
+        print(f"Duplicate external price rows removed: {price_result.get('duplicate_row_count', 0)}")
+        print(f"Derived market-cap rows: {price_result.get('derived_market_cap_row_count', 0)}")
+        print(f"Derived adjusted OHLC rows: {price_result.get('derived_adjusted_ohlc_row_count', 0)}")
     if price_result["missing_tickers"]:
         print(f"Missing price tickers: {', '.join(price_result['missing_tickers'][:20])}")
     print(f"SEC/price cache: {CACHE_ROOT}")

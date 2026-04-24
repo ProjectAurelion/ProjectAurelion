@@ -43,6 +43,9 @@ Optional flags:
 * `--tickers AAPL,MSFT,NVDA`
 * `--max-filings 500`
 * `--benchmark SPY`
+* `--prices-input-csv /path/to/vendor_prices.csv`
+* `--prices-vendor-profile generic`
+* `--prices-mapping-json /path/to/vendor_mapping.json`
 
 This writes:
 
@@ -89,6 +92,45 @@ Expected columns:
 
 The file must include rows for both the signal stocks and the benchmark ticker, which defaults to `SPY`.
 
+Optional richer research columns are also supported when you have better data:
+
+* `shares_outstanding`
+* `sector`
+* `industry`
+* `exchange`
+* `country`
+* `price_source`
+
+If you provide `--prices-input-csv`, the tool will normalize that file into the internal schema and use it instead of the public price downloader. If your external file does not include the benchmark ticker, the tool will supplement the benchmark from the public downloader so the event study can still run.
+
+The external price import now supports adapter profiles:
+
+* `generic`
+  A flexible default for common CSV exports with names like `Symbol`, `Date`, `Close`, `Volume`, `MarketCap`, and `Adjusted_Close`.
+* `normalized`
+  For files that already use the tool's canonical schema directly.
+* `institutional`
+  For richer exports with fields like `px_last`, `px_volume`, `cur_mkt_cap`, `shr_out`, `gics_sector_name`, and `gics_sub_industry_name`.
+
+You can also provide `--prices-mapping-json` to override column mappings or set constants for a specific vendor export. Example:
+
+```json
+{
+  "profile": "institutional",
+  "fields": {
+    "ticker": ["ric", "symbol"],
+    "date": "as_of_date",
+    "close": "close_px",
+    "adj_close": "total_return_close"
+  },
+  "constants": {
+    "price_source": "premium_vendor_export"
+  }
+}
+```
+
+When the external file includes `shares_outstanding` but not `market_cap`, the adapter will derive market cap from price times shares outstanding so the market-cap filter can still function more often.
+
 ## What The Tool Does
 
 1. Filters insider rows down to open-market purchases in common-stock-like instruments.
@@ -107,8 +149,11 @@ The output directory will contain:
 
 * `signal_candidates.csv`
 * `qualified_events.csv`
+* `parameter_matched_outcomes.csv`
+* `ticker_outcome_summary.csv`
 * `results_summary.csv`
 * `segmented_analysis.csv`
+* `research_summary.json`
 * `summary.md`
 
 The CLI now also prints a compact terminal summary so you can see candidate count, qualified-event count, and horizon-level performance immediately after a run.
@@ -122,6 +167,13 @@ This is a strong V1 foundation, but it still inherits the limits of the source C
 * Yahoo chart price coverage is practical for a V1, but not institutional-grade
 * security-type filtering depends on the metadata present in the filing
 * market-cap segmentation only works when `market_cap` is available in the price data, and the current automated price pull does not provide it
+
+For higher-level research and more production-like runs, the cleanest upgrade path is:
+
+1. Keep the SEC Form 4 normalization layer as the raw insider source of truth.
+2. Replace or enrich `daily_prices.csv` with a better vendor-grade export that includes `market_cap`, `shares_outstanding`, `sector`, `industry`, and cleaner delisting coverage.
+3. Use `parameter_matched_outcomes.csv` as the event ledger of every stock that met the rules, and `ticker_outcome_summary.csv` as the cleaner ticker-level scorecard.
+4. If your vendor export uses custom columns, add a small mapping JSON instead of hand-editing the CSV.
 
 For serious hypothesis testing, the right workflow is:
 
