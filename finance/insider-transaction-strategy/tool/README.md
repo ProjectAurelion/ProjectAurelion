@@ -10,13 +10,26 @@ The stack is intentionally dependency-light. It uses the Python standard library
 
 ## Fastest Way To Use It
 
-Run the local dashboard:
+For a friend cloning the repo fresh, the easiest path is:
+
+```bash
+cd finance/insider-transaction-strategy/tool
+cp .env.example .env
+# put your FMP API key in .env if you want the no-CSV workflow
+./run_dashboard.sh
+```
+
+Then open `http://127.0.0.1:8876` in your browser.
+
+You can also skip the `.env` step and paste the API key directly into the dashboard UI.
+
+If you prefer to launch manually, run the local dashboard:
 
 ```bash
 python3 /Users/alexchristensen/Documents/Playground/finance/insider-transaction-strategy/tool/dashboard_server.py
 ```
 
-Then open `http://127.0.0.1:8765` in your browser.
+Then open `http://127.0.0.1:8765` or whichever port you chose in your browser.
 
 From there you can:
 
@@ -41,6 +54,28 @@ If your goal is “tell me whether delayed Form 4 tracking looks tradable withou
    * `ticker_outcome_summary.csv` for the ticker scorecard
 
 This lets the tool generate `daily_prices.csv` internally from the API, with richer reference fields such as market cap, shares outstanding, sector, industry, exchange, country, and source labels when available.
+
+## Shareable GitHub Quickstart
+
+If you want to send this to a friend and have them run it from GitHub:
+
+1. Clone the repository.
+2. Check out the branch that contains the tool if it is not merged to `main` yet.
+3. Go to [tool](/Users/alexchristensen/Documents/Playground/finance/insider-transaction-strategy/tool).
+4. Run:
+
+```bash
+cp .env.example .env
+./run_dashboard.sh
+```
+
+5. Open `http://127.0.0.1:8876`
+6. Paste a real SEC User-Agent and either:
+   * enter an FMP API key in the UI, or
+   * store it in `.env`
+7. Run the study
+
+The startup script creates a virtual environment automatically, installs runtime dependencies, and launches the dashboard.
 
 ## CLI Modes
 

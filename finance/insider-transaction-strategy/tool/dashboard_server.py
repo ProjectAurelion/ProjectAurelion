@@ -24,6 +24,7 @@ RUNS_DIR = TOOL_DIR / "runs"
 sys.path.insert(0, str(TOOL_DIR))
 
 import data_pipeline  # noqa: E402
+import env_loader  # noqa: E402
 import input_validation  # noqa: E402
 import insider_event_study  # noqa: E402
 
@@ -388,6 +389,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    env_loader.load_env_file(TOOL_DIR / ".env")
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     print(f"Dashboard running at http://{args.host}:{args.port}")

@@ -21,6 +21,7 @@ from api_price_provider import (
     fetch_fmp_history_bundle,
 )
 from cache_utils import cache_path, read_or_fetch_bytes, read_or_fetch_text
+from env_loader import load_env_file
 from form4_normalization import mark_superseded_amendments, parse_form4_rows
 from price_loader import fetch_yahoo_history
 from vendor_price_adapters import normalize_price_rows
@@ -570,6 +571,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    load_env_file(TOOL_DIR / ".env")
     args = parse_args()
     start_date = parse_date(args.start_date)
     end_date = parse_date(args.end_date)
