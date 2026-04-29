@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import traceback
 from datetime import datetime
+from email.parser import BytesParser
+from email.policy import default
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +24,7 @@ RUNS_DIR = TOOL_DIR / "runs"
 sys.path.insert(0, str(TOOL_DIR))
 
 import data_pipeline  # noqa: E402
+import input_validation  # noqa: E402
 import insider_event_study  # noqa: E402
 
 
@@ -45,12 +49,44 @@ def bottom_events(event_rows: list[dict[str, str]], horizon: int = 63, limit: in
     return filtered[:limit]
 
 
+def parse_multipart_form(content_type: str, body: bytes) -> tuple[dict[str, str], dict[str, dict[str, object]]]:
+    header_block = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
+    message = BytesParser(policy=default).parsebytes(header_block + body)
+    fields: dict[str, str] = {}
+    files: dict[str, dict[str, object]] = {}
+
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        filename = part.get_filename()
+        payload = part.get_payload(decode=True) or b""
+        if filename:
+            files[name] = {
+                "filename": filename,
+                "content": payload,
+            }
+        else:
+            charset = part.get_content_charset() or "utf-8"
+            fields[name] = payload.decode(charset, errors="ignore")
+    return fields, files
+
+
+def write_uploaded_file(upload: dict[str, object], destination: Path) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(upload["content"])
+    return destination
+
+
 def build_response(
     *,
     run_dir: Path,
     insider_result: dict[str, object],
     price_result: dict[str, object],
     study_result: dict[str, object],
+    preflight: dict[str, object],
 ) -> dict[str, object]:
     return {
         "run_dir": str(run_dir),
@@ -66,9 +102,13 @@ def build_response(
             "results_summary": f"/runs/{run_dir.name}/analysis/results_summary.csv",
             "segmented_analysis": f"/runs/{run_dir.name}/analysis/segmented_analysis.csv",
             "research_summary_json": f"/runs/{run_dir.name}/analysis/research_summary.json",
+            "case_study_summary_json": f"/runs/{run_dir.name}/analysis/case_study_summary.json",
+            "case_study_md": f"/runs/{run_dir.name}/analysis/case_study.md",
             "summary_md": f"/runs/{run_dir.name}/analysis/summary.md",
         },
         "download": {
+            "insider_input_mode": insider_result.get("input_mode", "sec_download"),
+            "insider_input_file": insider_result.get("input_file", ""),
             "insider_rows": insider_result["row_count"],
             "raw_insider_rows": insider_result["raw_row_count"],
             "superseded_rows_removed": insider_result["superseded_row_count"],
@@ -83,18 +123,24 @@ def build_response(
             "market_cap_row_count": price_result["market_cap_row_count"],
             "price_input_mode": price_result.get("input_mode", "public_download"),
             "price_input_csv": price_result.get("input_csv", ""),
+            "price_input_file": price_result.get("input_file", ""),
             "benchmark_supplemented": price_result.get("benchmark_supplemented", "no"),
             "price_vendor_profile": price_result.get("price_vendor_profile", ""),
             "price_vendor_description": price_result.get("price_vendor_description", ""),
             "price_mapping_json": price_result.get("price_mapping_json", ""),
+            "market_data_provider": price_result.get("market_data_provider", "yahoo_public"),
+            "market_data_base_url": price_result.get("market_data_base_url", ""),
             "skipped_row_count": price_result.get("skipped_row_count", 0),
             "duplicate_row_count": price_result.get("duplicate_row_count", 0),
             "derived_market_cap_row_count": price_result.get("derived_market_cap_row_count", 0),
             "derived_adjusted_ohlc_row_count": price_result.get("derived_adjusted_ohlc_row_count", 0),
+            "profile_enriched_ticker_count": price_result.get("profile_enriched_ticker_count", 0),
+            "historical_market_cap_ticker_count": price_result.get("historical_market_cap_ticker_count", 0),
             "field_coverage_pct": price_result.get("field_coverage_pct", {}),
             "failed_filing_paths": insider_result["failed_filing_paths"],
             "cache_dir": insider_result["cache_dir"],
         },
+        "preflight": preflight,
         "study": {
             "candidate_count": study_result["candidate_count"],
             "raw_qualified_count": study_result["qualified_raw_count"],
@@ -108,6 +154,7 @@ def build_response(
             "parameter_outcome_rows": study_result["parameter_outcome_rows"],
             "ticker_summary_rows": study_result["ticker_summary_rows"],
             "research_summary": study_result["research_summary"],
+            "case_study": study_result["case_study"],
             "top_events_63d": top_events(study_result["event_rows"], 63),
             "bottom_events_63d": bottom_events(study_result["event_rows"], 63),
         },
@@ -150,9 +197,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         length = int(self.headers.get("Content-Length", "0"))
-        payload = json.loads(self.rfile.read(length) or b"{}")
+        raw_body = self.rfile.read(length) or b""
+        content_type = self.headers.get("Content-Type", "")
+        if content_type.startswith("multipart/form-data"):
+            payload, files = parse_multipart_form(content_type, raw_body)
+        else:
+            payload = json.loads(raw_body or b"{}")
+            files = {}
         try:
-            response = self.run_study(payload)
+            response = self.run_study(payload, files)
             self.send_json(HTTPStatus.OK, response)
         except Exception as exc:
             self.send_json(
@@ -182,12 +235,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def run_study(self, payload: dict[str, object]) -> dict[str, object]:
+    def run_study(self, payload: dict[str, object], files: dict[str, dict[str, object]]) -> dict[str, object]:
         start_date = data_pipeline.parse_date(str(payload["start_date"]))
         end_date = data_pipeline.parse_date(str(payload["end_date"]))
         user_agent = str(payload["user_agent"]).strip()
-        if not user_agent:
-            raise ValueError("A SEC-compliant User-Agent is required.")
 
         run_name = slugify(str(payload.get("run_name", "")).strip() or "study")
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -203,16 +254,69 @@ class DashboardHandler(BaseHTTPRequestHandler):
         external_prices_csv = str(payload.get("external_prices_csv", "")).strip()
         external_prices_vendor_profile = str(payload.get("external_prices_vendor_profile", "generic") or "generic").strip()
         external_prices_mapping_json = str(payload.get("external_prices_mapping_json", "")).strip()
+        market_data_provider = str(payload.get("market_data_provider", "yahoo_public") or "yahoo_public").strip()
+        market_data_api_key = str(
+            payload.get("market_data_api_key", "") or os.getenv("MARKET_DATA_API_KEY", os.getenv("FMP_API_KEY", ""))
+        ).strip()
+        market_data_base_url = str(
+            payload.get("market_data_base_url", data_pipeline.FMP_STABLE_BASE_URL) or data_pipeline.FMP_STABLE_BASE_URL
+        ).strip()
+        insider_upload = files.get("insider_upload")
+        prices_upload = files.get("prices_upload")
+        mapping_upload = files.get("mapping_upload")
 
-        insider_result = data_pipeline.download_form4_transactions(
-            start_date=start_date,
-            end_date=end_date,
-            output_csv=data_dir / "insider_transactions.csv",
-            user_agent=user_agent,
-            ticker_filter=ticker_filter,
-            max_filings=max_filings,
-        )
-        if external_prices_csv:
+        if not user_agent and insider_upload is None:
+            raise ValueError("A SEC-compliant User-Agent is required when downloading filings from the SEC.")
+
+        if insider_upload is not None:
+            insider_path = write_uploaded_file(insider_upload, data_dir / "insider_transactions.csv")
+            insider_check = input_validation.validate_insider_csv(insider_path)
+            insider_result = {
+                "output_csv": insider_path,
+                "row_count": insider_check["usable_row_count"],
+                "raw_row_count": insider_check["row_count"],
+                "superseded_row_count": 0,
+                "processed_filing_count": 0,
+                "failed_filing_count": 0,
+                "failed_filing_paths": [],
+                "unique_tickers": insider_check["unique_tickers"],
+                "unique_issuers": insider_check["unique_issuers"],
+                "cache_dir": str(data_pipeline.CACHE_ROOT),
+                "input_mode": "uploaded_csv",
+                "input_file": insider_upload["filename"],
+            }
+        else:
+            insider_result = data_pipeline.download_form4_transactions(
+                start_date=start_date,
+                end_date=end_date,
+                output_csv=data_dir / "insider_transactions.csv",
+                user_agent=user_agent,
+                ticker_filter=ticker_filter,
+                max_filings=max_filings,
+            )
+            insider_path = data_dir / "insider_transactions.csv"
+
+        if mapping_upload is not None:
+            mapping_json_path: Path | None = write_uploaded_file(mapping_upload, data_dir / "price_mapping.json")
+        elif external_prices_mapping_json:
+            mapping_json_path = Path(external_prices_mapping_json).expanduser()
+        else:
+            mapping_json_path = None
+
+        if prices_upload is not None:
+            uploaded_prices_source = write_uploaded_file(prices_upload, data_dir / "uploaded_prices_source.csv")
+            price_result = data_pipeline.normalize_external_price_history(
+                input_csv=uploaded_prices_source,
+                benchmark_ticker=benchmark,
+                start_date=start_date,
+                end_date=end_date,
+                output_csv=data_dir / "daily_prices.csv",
+                vendor_profile=external_prices_vendor_profile,
+                mapping_json=mapping_json_path,
+            )
+            price_result["input_mode"] = "uploaded_csv"
+            price_result["input_file"] = prices_upload["filename"]
+        elif external_prices_csv:
             price_result = data_pipeline.normalize_external_price_history(
                 input_csv=Path(external_prices_csv).expanduser(),
                 benchmark_ticker=benchmark,
@@ -220,8 +324,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 end_date=end_date,
                 output_csv=data_dir / "daily_prices.csv",
                 vendor_profile=external_prices_vendor_profile,
-                mapping_json=Path(external_prices_mapping_json).expanduser() if external_prices_mapping_json else None,
+                mapping_json=mapping_json_path,
             )
+            price_result["input_mode"] = "external_csv_path"
         else:
             price_result = data_pipeline.download_price_history(
                 tickers=set(insider_result["unique_tickers"]),
@@ -229,9 +334,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 start_date=start_date,
                 end_date=end_date,
                 output_csv=data_dir / "daily_prices.csv",
+                market_data_provider=market_data_provider,
+                market_data_api_key=market_data_api_key,
+                market_data_base_url=market_data_base_url,
+            )
+
+        preflight = input_validation.build_preflight_summary(
+            insider_csv=insider_path,
+            prices_csv=data_dir / "daily_prices.csv",
+            benchmark_ticker=benchmark,
+            insider_input_mode=str(insider_result.get("input_mode", "sec_download")),
+            price_input_mode=str(price_result.get("input_mode", "public_download")),
+        )
+        if not preflight["ready"]:
+            raise ValueError(
+                "Input check failed:\n- " + "\n- ".join(preflight["errors"])
             )
         study_result = insider_event_study.run_study(
-            insider_csv=data_dir / "insider_transactions.csv",
+            insider_csv=insider_path,
             prices_csv=data_dir / "daily_prices.csv",
             output_dir=analysis_dir,
             benchmark=benchmark,
@@ -255,6 +375,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             insider_result=insider_result,
             price_result=price_result,
             study_result=study_result,
+            preflight=preflight,
         )
 
 

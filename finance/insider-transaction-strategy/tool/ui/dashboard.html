@@ -1051,6 +1051,43 @@
                 </label>
               </div>
 
+              <div class="field-row">
+                <label>
+                  Market data provider
+                  <select id="market_data_provider">
+                    <option value="yahoo_public" selected>Yahoo public fallback</option>
+                    <option value="fmp_api">FMP API (recommended)</option>
+                  </select>
+                </label>
+                <label>
+                  Market data API key
+                  <input id="market_data_api_key" type="password" placeholder="Optional if set in env">
+                </label>
+              </div>
+
+              <label>
+                Market data API base URL
+                <input id="market_data_base_url" value="https://financialmodelingprep.com/stable">
+              </label>
+
+              <p class="hint">For the cleanest no-CSV workflow, keep insider download mode on and switch the market-data provider to FMP API with your key. If the API key field is blank, the server will also look for <code>MARKET_DATA_API_KEY</code> or <code>FMP_API_KEY</code>.</p>
+
+              <div class="field-row">
+                <label>
+                  Upload insider CSV
+                  <input id="insider_upload" type="file" accept=".csv,text/csv">
+                </label>
+                <label>
+                  Upload prices/reference CSV
+                  <input id="prices_upload" type="file" accept=".csv,text/csv">
+                </label>
+              </div>
+
+              <label>
+                Upload mapping JSON
+                <input id="mapping_upload" type="file" accept=".json,application/json">
+              </label>
+
               <label>
                 Optional external prices CSV path
                 <input id="external_prices_csv" placeholder="/path/to/vendor_prices.csv">
@@ -1071,7 +1108,7 @@
                 </label>
               </div>
 
-              <p class="hint">If provided, the study will use this richer local price/reference file instead of the public price downloader. The profile selects a preset column adapter, and the optional mapping JSON lets you override column names/constants for your specific vendor export.</p>
+              <p class="hint">Uploaded files take priority over local paths. Uploading an insider CSV skips the SEC download step. Uploading a prices/reference CSV skips the API/public downloader. The profile and optional mapping JSON help normalize richer vendor exports when you do use files.</p>
             </div>
 
             <div class="group-card">
@@ -1221,9 +1258,30 @@
           <div id="quick_read" class="quick-read"></div>
         </section>
 
+        <section class="results-grid" id="section-case-study">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <div class="eyebrow">Case Study</div>
+              <h3>Trading Thesis Verdict</h3>
+              <p>This is the clearest answer to the actual question: under delayed entry and your current rules, does tracking clustered Form 4 buying look tradable?</p>
+            </div>
+            <div id="case_study_overview"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>What To Do Next</h3>
+              <p>Use this to decide whether to expand the study, tighten the data, or move on from this parameter set.</p>
+            </div>
+            <div id="case_study_next_steps"></div>
+          </div>
+        </section>
+
         <section class="panel results-nav-panel">
           <div id="results_nav" class="results-nav">
             <button class="nav-chip" type="button" data-jump="section-overview">Overview</button>
+            <button class="nav-chip" type="button" data-jump="section-preflight">Input Check</button>
+            <button class="nav-chip" type="button" data-jump="section-case-study">Case Study</button>
             <button class="nav-chip" type="button" data-jump="section-performance">Performance</button>
             <button class="nav-chip" type="button" data-jump="section-outcomes">Outcomes</button>
             <button class="nav-chip" type="button" data-jump="section-events">Examples</button>
@@ -1336,6 +1394,24 @@
           <div id="warnings" class="callouts"></div>
         </section>
 
+        <section class="results-grid" id="section-preflight">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Input Check</h3>
+              <p>Before trusting the study, confirm the datasets actually looked usable after upload and normalization.</p>
+            </div>
+            <div id="preflight_summary"></div>
+          </div>
+
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Dataset Details</h3>
+              <p>A quick breakdown of the insider file, price file, and ticker overlap.</p>
+            </div>
+            <div id="preflight_details"></div>
+          </div>
+        </section>
+
         <section class="results-grid">
           <div class="panel section-panel">
             <div class="section-head">
@@ -1401,6 +1477,9 @@
       "tickers",
       "max_filings",
       "benchmark",
+      "market_data_provider",
+      "market_data_api_key",
+      "market_data_base_url",
       "external_prices_csv",
       "external_prices_vendor_profile",
       "external_prices_mapping_json",
@@ -1458,9 +1537,15 @@
     }
 
     function collectPayload() {
-      const payload = {};
+      const payload = new FormData();
       for (const id of fields) {
-        payload[id] = document.getElementById(id).value;
+        payload.append(id, document.getElementById(id).value);
+      }
+      for (const id of ["insider_upload", "prices_upload", "mapping_upload"]) {
+        const input = document.getElementById(id);
+        if (input && input.files && input.files[0]) {
+          payload.append(id, input.files[0]);
+        }
       }
       return payload;
     }
@@ -1749,15 +1834,18 @@
         `Signals: ${formatInteger(result.study.qualified_count)}`,
         `Investable: ${formatInteger(result.study.investable_count)}`,
         `Filings processed: ${formatInteger(result.download.processed_filing_count)}`,
-        `Price mode: ${result.download.price_input_mode === "external_csv" ? "external csv" : "public download"}`,
+        `Insider mode: ${humanizeKey(result.download.insider_input_mode || "sec_download")}`,
+        `Price mode: ${humanizeKey(result.download.price_input_mode || "public_download")}`,
         `Date window: ${document.getElementById("start_date").value} to ${document.getElementById("end_date").value}`
       ];
 
-      if (result.download.price_input_mode === "external_csv") {
+      if (["uploaded_csv", "external_csv_path"].includes(result.download.price_input_mode)) {
         snapshotItems.push(`Vendor profile: ${result.download.price_vendor_profile || "generic"}`);
         if (result.download.price_mapping_json) {
           snapshotItems.push("Custom mapping: yes");
         }
+      } else {
+        snapshotItems.push(`Market data: ${humanizeKey(result.download.market_data_provider || "yahoo_public")}`);
       }
 
       if (reference) {
@@ -2109,6 +2197,186 @@
       `;
     }
 
+    function renderCaseStudy(result) {
+      const study = result.study.case_study || {};
+      const overview = document.getElementById("case_study_overview");
+      const nextSteps = document.getElementById("case_study_next_steps");
+      const verdictMap = {
+        not_testable: "Not Testable Yet",
+        too_early: "Too Early",
+        weak: "Weak",
+        mixed: "Mixed",
+        promising_but_early: "Promising But Early",
+        promising: "Promising"
+      };
+      const verdictLabel = verdictMap[study.verdict] || humanizeKey(study.verdict || "unknown");
+      const score = study.confidence_score_0_to_100 ?? "n/a";
+      const evidence = study.evidence || [];
+      const winners = study.top_reference_winners || [];
+      const losers = study.top_reference_losers || [];
+
+      overview.innerHTML = `
+        <div class="decision-strip">
+          <div class="decision-top">
+            <div class="decision-copy">
+              <div class="decision-badge ${study.verdict === "promising" ? "good" : study.verdict === "weak" ? "bad" : "warn"}">${verdictLabel}</div>
+              <h3>${study.headline || "No case-study verdict available yet."}</h3>
+              <p>${study.interpretation || ""}</p>
+            </div>
+          </div>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <div class="label">Confidence Score</div>
+            <div class="value">${score}</div>
+            <div class="subvalue">0 to 100 heuristic score</div>
+          </div>
+          <div class="card">
+            <div class="label">Focus Sample</div>
+            <div class="value">${study.focus_sample_label || "n/a"}</div>
+            <div class="subvalue">${formatInteger(study.reference_complete_event_count || 0)} complete reference events</div>
+          </div>
+          <div class="card">
+            <div class="label">Reference Edge</div>
+            <div class="value">${formatSignedPct(study.reference_mean_net_bhar_return)}</div>
+            <div class="subvalue">${study.reference_horizon_days ? `${study.reference_horizon_days}d vs ${study.benchmark}` : "No complete horizon"}</div>
+          </div>
+          <div class="card">
+            <div class="label">Positive Rate</div>
+            <div class="value">${formatPct(study.reference_positive_rate)}</div>
+            <div class="subvalue">Reference horizon success rate</div>
+          </div>
+        </div>
+        <div class="callouts">
+          ${evidence.map(item => `<div class="callout">${item}</div>`).join("")}
+        </div>
+        <div class="results-grid">
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Best Reference Winners</h3>
+            </div>
+            <div class="table-wrap" id="case_study_winners"></div>
+          </div>
+          <div class="panel section-panel">
+            <div class="section-head">
+              <h3>Worst Reference Losers</h3>
+            </div>
+            <div class="table-wrap" id="case_study_losers"></div>
+          </div>
+        </div>
+      `;
+
+      renderTable(
+        "case_study_winners",
+        winners.map(row => ({
+          ticker: row.ticker,
+          company: row.issuer_name,
+          event_date: row.event_date,
+          reference_horizon: row.reference_horizon_days ? `${row.reference_horizon_days}d` : "n/a",
+          reference_edge: formatSignedPct(row.reference_net_bhar_return),
+          outcome: humanizeKey(row.reference_outcome)
+        })),
+        ["ticker", "company", "event_date", "reference_horizon", "reference_edge", "outcome"]
+      );
+      renderTable(
+        "case_study_losers",
+        losers.map(row => ({
+          ticker: row.ticker,
+          company: row.issuer_name,
+          event_date: row.event_date,
+          reference_horizon: row.reference_horizon_days ? `${row.reference_horizon_days}d` : "n/a",
+          reference_edge: formatSignedPct(row.reference_net_bhar_return),
+          outcome: humanizeKey(row.reference_outcome)
+        })),
+        ["ticker", "company", "event_date", "reference_horizon", "reference_edge", "outcome"]
+      );
+
+      nextSteps.innerHTML = `
+        <div class="callouts">
+          ${(study.next_steps || []).map(item => `<div class="callout">${item}</div>`).join("")}
+        </div>
+      `;
+    }
+
+    function renderPreflight(preflight) {
+      const summary = document.getElementById("preflight_summary");
+      const details = document.getElementById("preflight_details");
+      if (!preflight) {
+        summary.innerHTML = "<div class='empty-state'>No input check details available.</div>";
+        details.innerHTML = "";
+        return;
+      }
+
+      const statusLabel = preflight.ready ? "Ready" : "Needs Attention";
+      const statusTone = preflight.ready ? "good" : "bad";
+      const warningList = [
+        ...(preflight.errors || []).map(item => `Problem: ${item}`),
+        ...(preflight.warnings || []).map(item => `Caution: ${item}`)
+      ];
+
+      summary.innerHTML = `
+        <div class="decision-strip">
+          <div class="decision-top">
+            <div class="decision-copy">
+              <div class="decision-badge ${statusTone}">${statusLabel}</div>
+              <h3>${preflight.headline}</h3>
+              <p>Use this section to decide whether the uploaded or generated files were strong enough to trust before reading the performance summary.</p>
+            </div>
+          </div>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <div class="label">Insider Rows</div>
+            <div class="value">${formatInteger(preflight.insider.row_count)}</div>
+            <div class="subvalue">${formatInteger(preflight.insider.usable_row_count)} looked usable</div>
+          </div>
+          <div class="card">
+            <div class="label">Price Rows</div>
+            <div class="value">${formatInteger(preflight.prices.row_count)}</div>
+            <div class="subvalue">${formatInteger(preflight.prices.usable_row_count)} looked usable</div>
+          </div>
+          <div class="card">
+            <div class="label">Ticker Overlap</div>
+            <div class="value">${formatInteger(preflight.crosscheck.ticker_overlap_count)}</div>
+            <div class="subvalue">${formatPct((preflight.crosscheck.ticker_overlap_pct_of_insider || 0) / 100, 0)} of insider tickers had price coverage</div>
+          </div>
+          <div class="card">
+            <div class="label">Adjusted Price Coverage</div>
+            <div class="value">${formatPct((preflight.prices.adjusted_price_coverage_pct || 0) / 100, 0)}</div>
+            <div class="subvalue">Rows with adjusted prices</div>
+          </div>
+        </div>
+        <div class="callouts">
+          ${(warningList.length ? warningList : ["No major input-check warnings were raised."]).map(item => `<div class="callout">${item}</div>`).join("")}
+        </div>
+      `;
+
+      details.innerHTML = `
+        <div class="callouts">
+          <div class="callout">
+            <strong>Insider File</strong><br>
+            Mode: ${humanizeKey(preflight.insider.input_mode || "unknown")}<br>
+            Tickers: ${formatInteger(preflight.insider.unique_ticker_count)}<br>
+            Issuers: ${formatInteger(preflight.insider.unique_issuer_count)}<br>
+            Date window: ${preflight.insider.date_window || "n/a"}
+          </div>
+          <div class="callout">
+            <strong>Price File</strong><br>
+            Mode: ${humanizeKey(preflight.prices.input_mode || "unknown")}<br>
+            Tickers: ${formatInteger(preflight.prices.unique_ticker_count)}<br>
+            Benchmark rows: ${formatInteger(preflight.prices.benchmark_row_count)}<br>
+            Date window: ${preflight.prices.date_window || "n/a"}
+          </div>
+          <div class="callout">
+            <strong>Coverage Check</strong><br>
+            Market-cap coverage: ${formatPct((preflight.prices.market_cap_coverage_pct || 0) / 100, 0)}<br>
+            Adjusted-price coverage: ${formatPct((preflight.prices.adjusted_price_coverage_pct || 0) / 100, 0)}<br>
+            Ticker overlap: ${formatPct((preflight.crosscheck.ticker_overlap_pct_of_insider || 0) / 100, 0)}
+          </div>
+        </div>
+      `;
+    }
+
     function renderKeyValueList(containerId, data) {
       const container = document.getElementById(containerId);
       const rows = Object.entries(data || {});
@@ -2181,8 +2449,7 @@
       try {
         const response = await fetch("/api/run", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(collectPayload())
+          body: collectPayload()
         });
         const result = await response.json();
         if (!response.ok) {
@@ -2195,6 +2462,7 @@
         renderDecisionStrip(result, focusRows);
         renderCards(result, focusRows);
         renderQuickRead(result, focusRows);
+        renderCaseStudy(result);
         renderHorizonChart(result, focusRows);
         renderFriendlySummary(result, focusRows);
         renderDistribution(result);
@@ -2203,6 +2471,7 @@
         renderProductionTables(result);
         renderSegmentInsights(result, focusSample);
         renderWarnings(result.warnings);
+        renderPreflight(result.preflight);
         renderKeyValueList("coverage", result.coverage);
         renderKeyValueList("methodology", result.methodology);
         renderFiles(result.files);

@@ -6,7 +6,7 @@ This directory now contains three connected pieces for the V1 insider-transactio
 * [data_pipeline.py](/Users/alexchristensen/Documents/Playground/finance/insider-transaction-strategy/tool/data_pipeline.py): a downloader for SEC Form 4 data and daily prices
 * [dashboard_server.py](/Users/alexchristensen/Documents/Playground/finance/insider-transaction-strategy/tool/dashboard_server.py): a lightweight local UI for trying different rules and inspecting results
 
-The stack is intentionally dependency-free. It uses the Python standard library plus public data endpoints.
+The stack is intentionally dependency-light. It uses the Python standard library, the SEC as the insider source of truth, and optional API-backed market-data enrichment for more production-like runs.
 
 ## Fastest Way To Use It
 
@@ -21,10 +21,26 @@ Then open `http://127.0.0.1:8765` in your browser.
 From there you can:
 
 * fetch real SEC Form 4 filings
-* pull daily prices automatically
+* upload your own insider CSV and price/reference CSV directly from the browser
+* pull daily prices automatically from either the public fallback or a richer API provider
 * adjust the cluster and tradability rules
+* run an input check to confirm the files were usable after normalization
 * review summary tables, segment results, and top events
 * open the generated CSV and Markdown output files
+
+## Best Push-Button Workflow
+
+If your goal is “tell me whether delayed Form 4 tracking looks tradable without making me source and normalize vendor CSVs by hand,” the cleanest path is now:
+
+1. Leave the insider upload empty so the tool downloads official SEC Form 4 filings directly.
+2. Set the market-data provider to `FMP API`.
+3. Provide your FMP API key in the dashboard, or set `MARKET_DATA_API_KEY` / `FMP_API_KEY` in your environment.
+4. Run the study and read:
+   * `case_study.md` for the thesis-level answer
+   * `parameter_matched_outcomes.csv` for the event ledger
+   * `ticker_outcome_summary.csv` for the ticker scorecard
+
+This lets the tool generate `daily_prices.csv` internally from the API, with richer reference fields such as market cap, shares outstanding, sector, industry, exchange, country, and source labels when available.
 
 ## CLI Modes
 
@@ -43,6 +59,9 @@ Optional flags:
 * `--tickers AAPL,MSFT,NVDA`
 * `--max-filings 500`
 * `--benchmark SPY`
+* `--market-data-provider fmp_api`
+* `--market-data-api-key YOUR_KEY`
+* `--market-data-base-url https://financialmodelingprep.com/stable`
 * `--prices-input-csv /path/to/vendor_prices.csv`
 * `--prices-vendor-profile generic`
 * `--prices-mapping-json /path/to/vendor_mapping.json`
@@ -101,7 +120,14 @@ Optional richer research columns are also supported when you have better data:
 * `country`
 * `price_source`
 
-If you provide `--prices-input-csv`, the tool will normalize that file into the internal schema and use it instead of the public price downloader. If your external file does not include the benchmark ticker, the tool will supplement the benchmark from the public downloader so the event study can still run.
+If you provide `--prices-input-csv`, the tool will normalize that file into the internal schema and use it instead of the API/public price downloader. If your external file does not include the benchmark ticker, the tool will supplement the benchmark from the public downloader so the event study can still run.
+
+If you do not provide `--prices-input-csv`, you can now choose the market-data source directly:
+
+* `--market-data-provider yahoo_public`
+  Good for quick tests, but weak on market cap and reference coverage.
+* `--market-data-provider fmp_api`
+  Better for production-like research. The tool will call the Financial Modeling Prep API directly, enrich the normalized price history with market cap, shares outstanding, sector, industry, exchange, country, and preserve source labels in `daily_prices.csv`.
 
 The external price import now supports adapter profiles:
 
@@ -154,9 +180,48 @@ The output directory will contain:
 * `results_summary.csv`
 * `segmented_analysis.csv`
 * `research_summary.json`
+* `case_study_summary.json`
+* `case_study.md`
 * `summary.md`
 
 The CLI now also prints a compact terminal summary so you can see candidate count, qualified-event count, and horizon-level performance immediately after a run.
+
+The case-study outputs are meant to answer the push-button question more directly:
+
+* `case_study_summary.json`
+  A machine-readable verdict on whether delayed Form 4 tracking looks weak, mixed, promising, or still too early to judge under the chosen rules.
+* `case_study.md`
+  A concise human-readable memo that frames the trading-thesis question, summarizes the evidence, and suggests next steps.
+
+## Dashboard Upload Workflow
+
+The dashboard now supports two ways to provide data:
+
+1. Download mode
+   * leave the upload fields empty
+   * provide a SEC User-Agent
+   * the tool will fetch Form 4 data and public price history
+
+2. Upload mode
+   * upload an insider CSV directly in the browser
+   * optionally upload a richer prices/reference CSV
+   * optionally upload a mapping JSON if your vendor columns need overrides
+
+Uploaded files take priority over local path fields. If you upload an insider CSV, the dashboard skips the SEC download step. If you upload a price CSV, the dashboard skips the public price downloader and runs the vendor adapter path instead.
+
+3. API mode
+   * leave the price upload and local path fields empty
+   * choose `FMP API` as the market-data provider
+   * enter an API key or set `MARKET_DATA_API_KEY` / `FMP_API_KEY`
+
+In API mode the tool keeps SEC Form 4 normalization as the raw insider source of truth, then generates `daily_prices.csv` internally from the API rather than asking you to prepare a vendor export first.
+
+Every run now includes an **Input Check** section in the Results tab so you can confirm:
+
+* whether the insider file had enough usable rows
+* whether the price file had adjusted prices and market-cap coverage
+* whether the benchmark was present
+* whether insider tickers actually overlapped with the price dataset
 
 ## Notes
 
@@ -168,12 +233,12 @@ This is a strong V1 foundation, but it still inherits the limits of the source C
 * security-type filtering depends on the metadata present in the filing
 * market-cap segmentation only works when `market_cap` is available in the price data, and the current automated price pull does not provide it
 
-For higher-level research and more production-like runs, the cleanest upgrade path is:
+For higher-level research and more production-like runs, the cleanest upgrade path is now:
 
 1. Keep the SEC Form 4 normalization layer as the raw insider source of truth.
-2. Replace or enrich `daily_prices.csv` with a better vendor-grade export that includes `market_cap`, `shares_outstanding`, `sector`, `industry`, and cleaner delisting coverage.
-3. Use `parameter_matched_outcomes.csv` as the event ledger of every stock that met the rules, and `ticker_outcome_summary.csv` as the cleaner ticker-level scorecard.
-4. If your vendor export uses custom columns, add a small mapping JSON instead of hand-editing the CSV.
+2. Prefer the direct API-backed market-data path so the tool can generate `daily_prices.csv` internally without forcing you to source and hand-normalize CSV files first.
+3. If you already have premium vendor exports, use `--prices-input-csv` and an optional mapping JSON as a fallback path rather than editing raw files by hand.
+4. Use `parameter_matched_outcomes.csv` as the event ledger of every stock that met the rules, and `ticker_outcome_summary.csv` as the cleaner ticker-level scorecard.
 
 For serious hypothesis testing, the right workflow is:
 

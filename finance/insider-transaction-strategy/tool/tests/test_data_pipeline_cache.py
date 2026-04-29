@@ -296,3 +296,68 @@ def test_external_price_history_supports_mapping_json_overrides(tmp_path: Path, 
     mapped_row = next(row for row in rows if row["ticker"] == "MAPD")
     assert mapped_row["price_source"] == "mapped_vendor"
     assert mapped_row["market_cap"] == "100000000"
+
+
+def test_download_price_history_supports_fmp_api_mode(tmp_path: Path, monkeypatch) -> None:
+    output_csv = tmp_path / "api_prices.csv"
+
+    def fake_fetch_fmp_history_bundle(ticker, start_date, end_date, cache_root, api_key, base_url):
+        assert api_key == "demo-key"
+        assert base_url == "https://financialmodelingprep.com/stable"
+        return (
+            [
+                {
+                    "ticker": ticker,
+                    "date": "2024-01-03",
+                    "open": "10",
+                    "high": "11",
+                    "low": "9",
+                    "close": "10",
+                    "adj_open": "9.5",
+                    "adj_high": "10.45",
+                    "adj_low": "8.55",
+                    "adj_close": "9.5",
+                    "volume": "2000",
+                    "market_cap": "95000000",
+                    "shares_outstanding": "10000000",
+                    "sector": "Technology",
+                    "industry": "Software",
+                    "exchange": "NASDAQ",
+                    "country": "US",
+                    "price_source": "fmp_api",
+                }
+            ],
+            {
+                "profile_available": True,
+                "historical_market_cap_available": True,
+                "derived_market_cap_row_count": 0,
+            },
+        )
+
+    monkeypatch.setattr(data_pipeline, "fetch_fmp_history_bundle", fake_fetch_fmp_history_bundle)
+
+    result = data_pipeline.download_price_history(
+        tickers={"APIX"},
+        benchmark_ticker="SPY",
+        start_date=data_pipeline.parse_date("2024-01-01"),
+        end_date=data_pipeline.parse_date("2024-01-31"),
+        output_csv=output_csv,
+        cache_root=tmp_path,
+        market_data_provider="fmp_api",
+        market_data_api_key="demo-key",
+        market_data_base_url="https://financialmodelingprep.com/stable",
+        pause_seconds=0.0,
+    )
+
+    with output_csv.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert result["market_data_provider"] == "fmp_api"
+    assert result["profile_enriched_ticker_count"] == 2
+    assert result["historical_market_cap_ticker_count"] == 2
+    assert {row["ticker"] for row in rows} == {"APIX", "SPY"}
+    apix_row = next(row for row in rows if row["ticker"] == "APIX")
+    assert apix_row["market_cap"] == "95000000"
+    assert apix_row["shares_outstanding"] == "10000000"
+    assert apix_row["sector"] == "Technology"
+    assert apix_row["price_source"] == "fmp_api"

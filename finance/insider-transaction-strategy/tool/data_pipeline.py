@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import os
 import time
 import urllib.error
 import urllib.request
@@ -14,6 +15,11 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Optional
 
+from api_price_provider import (
+    FMP_STABLE_BASE_URL,
+    available_market_data_providers,
+    fetch_fmp_history_bundle,
+)
 from cache_utils import cache_path, read_or_fetch_bytes, read_or_fetch_text
 from form4_normalization import mark_superseded_amendments, parse_form4_rows
 from price_loader import fetch_yahoo_history
@@ -23,6 +29,26 @@ SEC_ARCHIVES_URL = "https://www.sec.gov/Archives"
 FORM_TYPES = {"4", "4/A"}
 TOOL_DIR = Path(__file__).resolve().parent
 CACHE_ROOT = TOOL_DIR / "cache"
+PRICE_FIELDNAMES = [
+    "ticker",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "adj_open",
+    "adj_high",
+    "adj_low",
+    "adj_close",
+    "volume",
+    "market_cap",
+    "shares_outstanding",
+    "sector",
+    "industry",
+    "exchange",
+    "country",
+    "price_source",
+]
 
 
 @dataclass(frozen=True)
@@ -274,6 +300,9 @@ def download_price_history(
     forward_padding_days: int = 400,
     pause_seconds: float = 0.1,
     cache_root: Path = CACHE_ROOT,
+    market_data_provider: str = "yahoo_public",
+    market_data_api_key: str = "",
+    market_data_base_url: str = FMP_STABLE_BASE_URL,
 ) -> dict[str, object]:
     padded_start = start_date - timedelta(days=lookback_padding_days)
     padded_end = end_date + timedelta(days=forward_padding_days)
@@ -283,10 +312,39 @@ def download_price_history(
     missing: list[str] = []
     adjusted_price_row_count = 0
     market_cap_row_count = 0
+    derived_market_cap_row_count = 0
+    profile_enriched_ticker_count = 0
+    historical_market_cap_ticker_count = 0
+    field_presence = {
+        "adj_close": 0,
+        "market_cap": 0,
+        "shares_outstanding": 0,
+        "sector": 0,
+        "industry": 0,
+    }
+
+    if market_data_provider == "fmp_api" and not market_data_api_key.strip():
+        raise ValueError("FMP API mode requires a market-data API key.")
 
     for ticker in sorted(set(tickers) | {normalize_ticker(benchmark_ticker)}):
         try:
-            rows = fetch_yahoo_history(ticker, padded_start, padded_end, cache_root)
+            if market_data_provider == "fmp_api":
+                rows, enrichment = fetch_fmp_history_bundle(
+                    ticker,
+                    start_date=padded_start,
+                    end_date=padded_end,
+                    cache_root=cache_root,
+                    api_key=market_data_api_key,
+                    base_url=market_data_base_url,
+                )
+                if enrichment.get("profile_available"):
+                    profile_enriched_ticker_count += 1
+                if enrichment.get("historical_market_cap_available"):
+                    historical_market_cap_ticker_count += 1
+                derived_market_cap_row_count += int(enrichment.get("derived_market_cap_row_count", 0))
+            else:
+                rows = fetch_yahoo_history(ticker, padded_start, padded_end, cache_root)
+
             if not rows:
                 missing.append(ticker)
                 continue
@@ -298,6 +356,11 @@ def download_price_history(
                     continue
                 adjusted_price_row_count += 1 if row.get("adj_close") else 0
                 market_cap_row_count += 1 if row.get("market_cap") else 0
+                field_presence["adj_close"] += 1 if row.get("adj_close") else 0
+                field_presence["market_cap"] += 1 if row.get("market_cap") else 0
+                field_presence["shares_outstanding"] += 1 if row.get("shares_outstanding") else 0
+                field_presence["sector"] += 1 if row.get("sector") else 0
+                field_presence["industry"] += 1 if row.get("industry") else 0
                 all_rows.append(
                     {
                         "ticker": normalize_ticker(ticker),
@@ -317,7 +380,7 @@ def download_price_history(
                         "industry": row.get("industry", ""),
                         "exchange": row.get("exchange", ""),
                         "country": row.get("country", ""),
-                        "price_source": row.get("price_source", "yahoo_public"),
+                        "price_source": row.get("price_source", market_data_provider),
                     }
                 )
                 kept_any = True
@@ -330,27 +393,12 @@ def download_price_history(
         time.sleep(pause_seconds)
 
     all_rows.sort(key=lambda row: (row["ticker"], row["date"]))
-    fieldnames = [
-        "ticker",
-        "date",
-        "open",
-        "high",
-        "low",
-        "close",
-        "adj_open",
-        "adj_high",
-        "adj_low",
-        "adj_close",
-        "volume",
-        "market_cap",
-        "shares_outstanding",
-        "sector",
-        "industry",
-        "exchange",
-        "country",
-        "price_source",
-    ]
-    write_csv(output_csv, all_rows, fieldnames)
+    write_csv(output_csv, all_rows, PRICE_FIELDNAMES)
+    normalized_row_count = len(all_rows)
+    coverage = {
+        key: round((count / normalized_row_count) * 100, 2) if normalized_row_count else 0.0
+        for key, count in field_presence.items()
+    }
     return {
         "output_csv": output_csv,
         "row_count": len(all_rows),
@@ -358,6 +406,13 @@ def download_price_history(
         "missing_tickers": missing,
         "adjusted_price_row_count": adjusted_price_row_count,
         "market_cap_row_count": market_cap_row_count,
+        "derived_market_cap_row_count": derived_market_cap_row_count,
+        "profile_enriched_ticker_count": profile_enriched_ticker_count,
+        "historical_market_cap_ticker_count": historical_market_cap_ticker_count,
+        "field_coverage_pct": coverage,
+        "input_mode": market_data_provider,
+        "market_data_provider": market_data_provider,
+        "market_data_base_url": market_data_base_url if market_data_provider == "fmp_api" else "",
         "cache_dir": str(cache_root),
     }
 
@@ -430,27 +485,7 @@ def normalize_external_price_history(
             downloaded.append(benchmark)
 
     all_rows.sort(key=lambda row: (row["ticker"], row["date"]))
-    fieldnames = [
-        "ticker",
-        "date",
-        "open",
-        "high",
-        "low",
-        "close",
-        "adj_open",
-        "adj_high",
-        "adj_low",
-        "adj_close",
-        "volume",
-        "market_cap",
-        "shares_outstanding",
-        "sector",
-        "industry",
-        "exchange",
-        "country",
-        "price_source",
-    ]
-    write_csv(output_csv, all_rows, fieldnames)
+    write_csv(output_csv, all_rows, PRICE_FIELDNAMES)
 
     return {
         "output_csv": output_csv,
@@ -515,6 +550,22 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Optional JSON file overriding column mappings/constants for --prices-input-csv.",
     )
+    parser.add_argument(
+        "--market-data-provider",
+        default="yahoo_public",
+        choices=sorted(available_market_data_providers()),
+        help="Price/reference data mode when --prices-input-csv is not provided. Use fmp_api for richer production-style research.",
+    )
+    parser.add_argument(
+        "--market-data-api-key",
+        default=os.getenv("MARKET_DATA_API_KEY", os.getenv("FMP_API_KEY", "")),
+        help="Optional API key for --market-data-provider fmp_api. Defaults to MARKET_DATA_API_KEY or FMP_API_KEY when set.",
+    )
+    parser.add_argument(
+        "--market-data-base-url",
+        default=FMP_STABLE_BASE_URL,
+        help="Optional base URL override for API-backed market data. Default points at the FMP stable API.",
+    )
     return parser.parse_args()
 
 
@@ -553,6 +604,9 @@ def main() -> int:
             start_date=start_date,
             end_date=end_date,
             output_csv=prices_csv,
+            market_data_provider=args.market_data_provider,
+            market_data_api_key=args.market_data_api_key,
+            market_data_base_url=args.market_data_base_url,
         )
 
     print("Downloaded raw study inputs")
@@ -574,6 +628,18 @@ def main() -> int:
         print(f"Duplicate external price rows removed: {price_result.get('duplicate_row_count', 0)}")
         print(f"Derived market-cap rows: {price_result.get('derived_market_cap_row_count', 0)}")
         print(f"Derived adjusted OHLC rows: {price_result.get('derived_adjusted_ohlc_row_count', 0)}")
+    else:
+        print(f"Market-data provider: {price_result.get('market_data_provider', 'yahoo_public')}")
+        if price_result.get("market_data_base_url"):
+            print(f"Market-data API base URL: {price_result['market_data_base_url']}")
+        if price_result.get("profile_enriched_ticker_count") is not None:
+            print(f"Profile-enriched tickers: {price_result.get('profile_enriched_ticker_count', 0)}")
+        if price_result.get("historical_market_cap_ticker_count") is not None:
+            print(
+                "Historical market-cap tickers: "
+                f"{price_result.get('historical_market_cap_ticker_count', 0)}"
+            )
+        print(f"Derived market-cap rows: {price_result.get('derived_market_cap_row_count', 0)}")
     if price_result["missing_tickers"]:
         print(f"Missing price tickers: {', '.join(price_result['missing_tickers'][:20])}")
     print(f"SEC/price cache: {CACHE_ROOT}")

@@ -13,6 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
+import case_study
 from cluster_logic import assign_overlap_groups, build_raw_cluster_candidates
 from event_alignment import (
     build_aligned_series,
@@ -1195,6 +1196,8 @@ def build_markdown_summary(
             "* `results_summary.csv`: aggregate gross/net BHAR metrics and inference diagnostics by horizon and sample",
             "* `segmented_analysis.csv`: grouped gross/net BHAR metrics by cluster-strength and investability buckets",
             "* `research_summary.json`: machine-readable summary of counts, warnings, and top winners/losers",
+            "* `case_study_summary.json`: machine-readable verdict on whether delayed Form 4 tracking looks viable under the chosen rules",
+            "* `case_study.md`: concise case-study write-up answering the trading-thesis question in plain English",
         ]
     )
     output_dir.joinpath("summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1359,6 +1362,15 @@ def run_study(
         "methodology": methodology,
         "parameter_outcome_summary": research_summary,
     }
+    case_study_summary = case_study.build_case_study(
+        benchmark=benchmark_ticker,
+        summary_rows=summary_rows,
+        coverage=coverage,
+        warnings=warnings,
+        parameter_outcome_rows=parameter_outcome_rows,
+        ticker_summary_rows=ticker_summary_rows,
+        methodology=methodology,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_csv(output_dir / "signal_candidates.csv", candidate_rows)
@@ -1368,6 +1380,8 @@ def run_study(
     write_csv(output_dir / "results_summary.csv", summary_rows)
     write_csv(output_dir / "segmented_analysis.csv", segment_rows)
     write_json(output_dir / "research_summary.json", research_summary_payload)
+    write_json(output_dir / "case_study_summary.json", case_study_summary)
+    output_dir.joinpath("case_study.md").write_text(case_study.build_case_study_markdown(case_study_summary), encoding="utf-8")
     build_markdown_summary(
         output_dir=output_dir,
         benchmark_ticker=benchmark_ticker,
@@ -1387,6 +1401,7 @@ def run_study(
         "parameter_outcome_rows": parameter_outcome_rows,
         "ticker_summary_rows": ticker_summary_rows,
         "research_summary": research_summary_payload,
+        "case_study": case_study_summary,
         "summary_rows": summary_rows,
         "segment_rows": segment_rows,
         "candidate_count": len(candidate_rows),

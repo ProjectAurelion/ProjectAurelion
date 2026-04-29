@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
 import sys
 from datetime import date, timedelta
@@ -228,6 +229,8 @@ def test_run_study_uses_primary_events_and_bhar(tmp_path: Path) -> None:
     assert event_row["industry"] == "REIT"
     assert event_row["price_source"] == "test_vendor"
     assert summary_21d["warning_flags"] == "insufficient_sample_for_inference"
+    assert result["case_study"]["verdict"] == "too_early"
+    assert result["case_study"]["reference_horizon_days"] == 63
 
     parameter_outcomes = read_csv_rows(output_dir / "parameter_matched_outcomes.csv")
     ticker_summary = read_csv_rows(output_dir / "ticker_outcome_summary.csv")
@@ -242,3 +245,8 @@ def test_run_study_uses_primary_events_and_bhar(tmp_path: Path) -> None:
     assert ticker_summary[0]["ticker"] == "TEST"
     assert ticker_summary[0]["successful_reference_event_count"] == "1"
     assert (output_dir / "research_summary.json").exists()
+    assert (output_dir / "case_study_summary.json").exists()
+    assert (output_dir / "case_study.md").exists()
+    case_study_summary = json.loads((output_dir / "case_study_summary.json").read_text(encoding="utf-8"))
+    assert case_study_summary["verdict"] == "too_early"
+    assert "delayed Form 4 tracking" in case_study_summary["interpretation"]
