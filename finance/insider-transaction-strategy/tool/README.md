@@ -1,5 +1,14 @@
 # Insider Event Study Tool
 
+If you are trying to use the project rather than develop it, start from the top-level strategy folder:
+
+```bash
+cd finance/insider-transaction-strategy
+./launch_dashboard.sh
+```
+
+The top-level [README.md](/Users/alexchristensen/Documents/Playground/finance/insider-transaction-strategy/README.md) is the cleaner landing page. This file is the deeper technical reference for the tool itself.
+
 This directory now contains three connected pieces for the V1 insider-transaction event study described in [notes.md](/Users/alexchristensen/Documents/Playground/finance/insider-transaction-strategy/notes.md):
 
 * [insider_event_study.py](/Users/alexchristensen/Documents/Playground/finance/insider-transaction-strategy/tool/insider_event_study.py): the core backtest engine
